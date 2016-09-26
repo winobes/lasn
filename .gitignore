@@ -1,3 +1,7 @@
+# large corpus objects
+/data/corpus/
+*.zip
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
