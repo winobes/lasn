@@ -15,7 +15,7 @@ def get_lines(path):
     with open(path, 'r') as f:
         return [line[:-1] for line in f.readlines()]
 
-FWORDS_DIR = 'function words/'
+FWORDS_DIR = '../data/function words/'
 markers = ['conjunctions', 'articles', 'prepositions', 'adverbs', 'quantifiers', 
            'impersonal pronouns', 'personal pronouns', 'auxiliary verbs']
 markers = {m: get_lines(FWORDS_DIR + m + '.txt') for m in markers}
@@ -129,7 +129,8 @@ class Corpus:
 
         net = nx.Graph()
         net.add_nodes_from(self.users.keys())
-        utts = self.utts.values()
+        utts = [utt for utt in self.utts.values() if utt.timestamp and 
+		utt.timestamp >= start_date and utt.timestamp <= end_date]
 
         print("Generating network from reply pairs...")
         reply_to_unknown_user = 0
