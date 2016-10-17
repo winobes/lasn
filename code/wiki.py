@@ -7,6 +7,7 @@ To get started, create a corpus object by supplying Corpus with a path to the un
 import re
 from datetime import datetime
 
+
 def get_lines(path):
     """
     Returns a list of strings with no newline characters.
@@ -19,6 +20,9 @@ FWORDS_DIR = '../data/function words/'
 markers = ['conjunctions', 'articles', 'prepositions', 'adverbs', 'quantifiers', 
            'impersonal pronouns', 'personal pronouns', 'auxiliary verbs']
 markers = {m: get_lines(FWORDS_DIR + m + '.txt') for m in markers}
+
+earliest_date = datetime(2006,1,1)
+latest_date = datetime(2011,12,31)
 
 class User:
 
@@ -42,7 +46,7 @@ class Utt:
         self.user_id = c[1]
         self.talkpage_user_id = c[2]
         self.conversation_root = c[3]
-        self.reply_to = None if c[4] in {"initial_post", "-1"} else self.corpus.utts[c[4]]
+        self.reply_to = self.corpus.utts[c[4]] if c[4] in self.corpus.utts else None
         try:
             self.timestamp = datetime.strptime(c[5], "%Y-%m-%d %H:%M:%S")
         except ValueError:
@@ -69,7 +73,7 @@ class Corpus:
     ADMINS_FILE = "wikipedia.talkpages.admins.txt"
     FWORDS_DIR  = "function words/"
 
-    def __init__(self, path):
+    def __init__(self, path, start_date=earliest_date, end_date=latest_date):
 
         print("Creating Users...")
         self.users = {}
@@ -99,13 +103,13 @@ class Corpus:
                 continue
             new_utt = Utt(self, line)
             user = new_utt.user_id
-            self.utts[new_utt.utt_id] = new_utt
-            if user in self.users:
-                self.users[user].utts.append(new_utt)
+            if new_utt.timestamp and start_date <= new_utt.timestamp and new_utt.timestamp <= end_date:
+                 self.utts[new_utt.utt_id] = new_utt
+                 if user in self.users:
+                    self.users[user].utts.append(new_utt)
 
 
-    def generate_network(self, start_date=None, end_date=None, 
-            prune=True, normalize_edge_weights=True):
+    def generate_network(self, prune=True, normalize_edge_weights=True):
         """
         Crates a NetworkX network whose edges are based on reply pairs within 
         the range of dates. A start/end date of None means on the left/right.
@@ -128,19 +132,17 @@ class Corpus:
         import networkx as nx
 
         net = nx.Graph()
-        net.add_nodes_from(self.users.keys())
-        utts = [utt for utt in self.utts.values() if utt.timestamp and 
-		utt.timestamp >= start_date and utt.timestamp <= end_date]
+        utts = self.utts.values()
 
-        print("Generating network from reply pairs...")
+        print("Generating network from", len(utts), "utterances...")
         reply_to_unknown_user = 0
-        for utt in self.utts.values():
+        for utt in utts: 
             user_A = utt.user_id
             if utt.reply_to:
                 user_B = utt.reply_to.user_id
             else: # If not a reply, it's the conversation head
                 user_B = utt.talkpage_user_id
-            if user_B in self.users and not user_B == user_A:
+            if user_A in self.users and user_B in self.users and not user_B == user_A:
                 if net.has_edge(user_A, user_B):
                     net[user_A][user_B]['weight'] += 1
                 else:
@@ -169,151 +171,66 @@ class Corpus:
         return net
 
 
-    def reply_pairs(self, group_A, group_B):
+    def reply_pairs(self, a, b):
         """ 
-        Gives utterance pairs where users in group_B are replying to utterances
-        of users in group_A. 
+        Gives utterance pairs where user b is replying to user a.
         """
         reply_pairs = []
-        utt_ids = set()
-        for utt_b in self.utts.values():
-            if utt_b.user_id in group_B:
-                if utt_b.reply_to: 
-                    utt_a = utts[utt_b.reply_to]
-                    if utt_a.user_id in group_A and not utt_a.user_id == utt_b.user_id:
-                        reply_pairs.append((utt_a, utt_b))
+        for u2 in self.users[b].utts:
+            u1 = u2.reply_to
+            if not u1:
+                continue
+            if u1.user_id == a:
+                reply_pairs.append((u1,u2))
         return reply_pairs
 
 
-    def coordination_given(self, group_A, group_B, ignore_ngram_repeats=False):
+    def coordination(self, a, b):
         """
-        Calculates the coordination of group_B towards group_A (iterables of user 
-        id's) along each marker as in Danescu-Niculescu-Mizil et. al. 2012, equation 3.
+        Calculates the coordination of user b towards user a along each marker as 
+        in Danescu-Niculescu-Mizil et. al. 2012, equation 2.
 
         We remove wholesale repetitions of phrases up to length `ignore_ngram_repeats` 
         to help ensure that only true style matching is being captured. See Danescu-
         Niculescu-Mizil et. al. 2012, footnote 11.
+    	"""
+        reply_pairs = self.reply_pairs(a, b) 
+        coord = {m:None for m in markers}
+        coord['agg3'] = None
+        if not reply_pairs:
+            return coord
+        for m in markers:
+            m_a = 0; m_b = 0; m_ab = 0
+            total = len(reply_pairs)
+            for u1,u2 in reply_pairs:
+                if u1.exhibits(m):
+                    m_a += 1
+                    if u2.exhibits(m):
+                        m_b  += 1
+                        m_ab += 1
+                elif u2.exhibits(m):
+                    m_b += 1
+            if m_a > 0 and m_b > 0 and m_a != total and m_b != total:
+                coord[m] = m_ab/m_a - m_b/total
+        defined_markers = [m for m in markers if coord[m] is not None]
+        if defined_markers:
+            coord['agg3'] = sum(coord[m] for m in defined_markers) / len(defined_markers)
+        return coord
 
-        Note that this is not an aggregate measure; the return value is a dictionary 
-        containing, for each user in group_B, a dictionary from marker names to that 
-        user's coordination given to group_A along that marker.
-        """
-
-        raw = {user : {m :{'A_b': 0, 'Am_b' : 0, 'A_bm' : 0, 'Am_bm' : 0} 
-            for m in markers} for user in group_B}
-        utts = self.utts.values()
-        print("Scanning", len(utts), "utterances.")
-        i = 0
-        for u2 in utts:
-            i += 1
-            print("Done", i, end='\r')
-            if u2.user_id in group_B:
-                u1 = u2.reply_to
-                if u1 and u1.user_id in group_A:
-                    for m in markers:
-                        raw[u2.user_id][m]['A_b'] += 1
-                        if u1.exhibits(m):
-                            raw[u2.user_id][m]['Am_b'] += 1
-                            if u2.exhibits(m):
-                                raw[u2.user_id][m]['Am_bm'] += 1
-                                raw[u2.user_id][m]['A_bm'] += 1
-                        elif u2.exhibits(m):
-                            raw[u2.user_id][m]['A_bm'] += 1
-
-        # we might want to do something with raw at some point like only let the marker
-        # be defined for users that have more than x in A_b or Am_b.
-        coords = {user : {m : raw[user][m]['Am_bm']/raw[user][m]['Am_b'] - 
-                              raw[user][m]['A_bm']/raw[user][m]['A_b'] 
-                          if raw[user][m]['Am_b'] and raw[user][m]['A_b'] else None 
-                          for m in markers} for user in raw}
-        print()
-        return coords
-
-
-    def coordination_received(self, group_A, group_B):
-        """
-        Orthoganal to the measure defined by Danescu-Niculescu-Mizil above...
-        This is essentially the same measure as Corpus.coord, but with respect to the
-        initiator of the reply pair. So it gives back a dictionary of whose keys are
-        the users in group_A and whose values are the coordinations they receive from
-        the users in group_B.
-        """        
-        raw = {user : {m :{'a_B': 0, 'am_B' : 0, 'a_Bm' : 0, 'am_Bm' : 0} 
-            for m in markers} for user in group_A}
-        utts = self.utts.values()
-        print("Scanning", len(utts), "utterances.")
-        i = 0
-        for u2 in utts:
-            i += 1
-            print("Done", i, end='\r')
-            if u2.user_id in group_B:
-                u1 = u2.reply_to
-                if u1 and u1.user_id in group_A:
-                    for m in markers:
-                        raw[u1.user_id][m]['a_B'] += 1
-                        if u1.exhibits(m):
-                            raw[u1.user_id][m]['am_B'] += 1
-                            if u2.exhibits(m):
-                                raw[u1.user_id][m]['am_Bm'] += 1
-                                raw[u1.user_id][m]['a_Bm'] += 1
-                        elif u2.exhibits(m):
-                            raw[u1.user_id][m]['a_Bm'] += 1
-
-        # we might want to do something with raw at some point like only let the marker
-        # be defined for users that have more than x in A_b or Am_b.
-        coords = {user : {m : raw[user][m]['am_Bm']/raw[user][m]['am_B'] - 
-                              raw[user][m]['a_Bm']/raw[user][m]['a_B'] 
-                        if raw[user][m]['am_B'] and raw[user][m]['a_B'] else None 
-                        for m in markers} for user in raw}
-        print()
-        return coords
-
-
-def aggregate1(coords):
-    """ Only consider individuals for whom all markers are defined """
-    aggregate = {user: (sum(coords[user].values())/len(markers) 
-        if all(coords[user][m] != None for m in markers) else None) 
-        for user in coords}
-    return aggregate
-
-def aggregate2(coords):
-    """
-    Where the a marker is not defined for some individual, use the group
-    average for that marker.
-    """
-    average_per_marker = {}
-    for m in markers:
-        defined_for_m = {user for user in coords if coords[user][m] != None}
-        average_per_marker[m] = sum([coords[user][m] 
-            for user in defined_for_m])/len(defined_for_m)
-
-    new_coords = {user : {m :(coords[user][m] 
-        if coords[user][m] != None else average_per_marker[m]) for m in markers} 
-        for user in coords}
-
-    aggregate = {user : sum(new_coords[user].values())/len(markers) for user in coords}
-    return aggregate
-
-def aggregate3(coords):
-    """
-    Where a marker is not defined, simply leave it out of the user's aggigate
-    score. This assumes that the missing marker would have shown the same level
-    of coordination as the ones for which we have data.
-    """
-    aggregate = {}
-    for user in coords:
-        defined = [coords[user][m] for m in markers if coords[user][m] != None]
-        if defined:
-            aggregate[user] = sum(defined)/len(defined)
-        else: # user doesn't have any markes defined
-            aggregate[user] = None
-    return aggregate
-
-def average_aggregate(aggs):
-    """ Calculates average aggregate coordination ignoring undefined values. """
-    values = [agg for agg in aggs.values() if agg != None]
-    return sum(values)/len(values)
-
+    def coordination_given(self, a): 
+        coords = {b:self.coordination(b, a) for b in self.users}
+        agg_defined = [b for b in coords if coords[b]['agg3'] is not None]
+        if not agg_defined:
+            return None 
+        return sum(coords[b]['agg3'] for b in agg_defined) / len(agg_defined)
+        
+    def coordination_received(self, a):
+        coords = {b:self.coordination(a, b) for b in self.users} 
+        agg_defined = [b for b in coords if coords[b]['agg3'] is not None]
+        if not agg_defined:
+            return None 
+        return sum(coords[b]['agg3'] for b in agg_defined) / len(agg_defined)
+ 
 def split_list(data, measure, cutoff):
     sorted_data = sorted(data, key=lambda x: measure[x], reverse=True)
     return (sorted_data[0:cutoff], sorted_data[cutoff:])
