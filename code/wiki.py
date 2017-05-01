@@ -4,9 +4,17 @@ www.cs.cornell.edu/~cristian/Echoes_of_power_files/wikipedia_conversations_corpu
 To get started, create a corpus object by supplying Corpus with a path to the unzipped corpus.
 """
 
+from __future__ import print_fucnction
 import re
 from datetime import datetime
+from nltk.tokenize import word_tokenize
 
+
+DELIM = " +++$+++ "
+CONVO_FILE  = "wikipedia.talkpages.conversations.txt"
+USERS_FILE  = "wikipedia.talkpages.userinfo.txt"
+ADMINS_FILE = "wikipedia.talkpages.admins.txt"
+FWORDS_DIR = '../data/function words/'
 
 def get_lines(path):
     """
@@ -16,19 +24,19 @@ def get_lines(path):
     with open(path, 'r') as f:
         return [line[:-1] for line in f.readlines()]
 
-FWORDS_DIR = '../data/function words/'
+def split_list(data, measure, cutoff):
+    sorted_data = sorted(data, key=lambda x: measure[x], reverse=True)
+    return (sorted_data[0:cutoff], sorted_data[cutoff:])
+
 markers = ['conjunctions', 'articles', 'prepositions', 'adverbs', 'quantifiers', 
            'impersonal pronouns', 'personal pronouns', 'auxiliary verbs']
 markers = {m: get_lines(FWORDS_DIR + m + '.txt') for m in markers}
-
-earliest_date = datetime(2006,1,1)
-latest_date = datetime(2011,12,31)
 
 class User:
 
     def __init__(self, corpus, s):
         self.corpus = corpus
-        c = s.split(corpus.DELIM)
+        c = s.split(DELIM)
         self.user = c[0]
         self.edit_count = int(c[1]) 
         self.gender = c[2] 
@@ -41,7 +49,7 @@ class Utt:
 
     def __init__(self, corpus, s):
         self.corpus = corpus
-        c = s.split(corpus.DELIM)
+        c = s.split(DELIM)
         self.utt_id = c[0]
         self.user_id = c[1]
         self.talkpage_user_id = c[2]
@@ -55,11 +63,10 @@ class Utt:
         self.clean_text = c[7]
         # skip the raw text c[8]
 
-        # TODO: see if real tokenization makes any difference
-        self.word_list = re.sub("[^\w]", " ", self.clean_text).split()
+        self.tokenized = word_tokenize(self.clean_text)
 
     def exhibits(self, m):
-        return any(f_word in self.word_list for f_word in markers[m])
+        return any(f_word in self.tokenized for f_word in markers[m])
 
 class Corpus:
     """
@@ -67,21 +74,15 @@ class Corpus:
     users: a dictionary of users by numerical id 
     """
 
-    DELIM = " +++$+++ "
-    CONVO_FILE  = "wikipedia.talkpages.conversations.txt"
-    USERS_FILE  = "wikipedia.talkpages.userinfo.txt"
-    ADMINS_FILE = "wikipedia.talkpages.admins.txt"
-    FWORDS_DIR  = "function words/"
-
-    def __init__(self, path, start_date=earliest_date, end_date=latest_date):
+    def __init__(self, path):
 
         print("Creating Users...")
         self.users = {}
-        lines = get_lines(path + self.USERS_FILE)
+        lines = get_lines(path + USERS_FILE)
         for line in lines:
             new_user = User(self, line)
             self.users[new_user.user] = new_user
-        lines = get_lines(path + self.ADMINS_FILE)
+        lines = get_lines(path + ADMINS_FILE)
         for line in lines:
             s = line.split(" ")
             date = s[-1]
@@ -95,7 +96,7 @@ class Corpus:
         
         print("Loading conversations...")
         self.utts = {}
-        lines = get_lines(path + self.CONVO_FILE)
+        lines = get_lines(path + CONVO_FILE)
         for line in lines:
             if line.startswith("could not match"):
                 continue
@@ -103,13 +104,24 @@ class Corpus:
                 continue
             new_utt = Utt(self, line)
             user = new_utt.user_id
-            if new_utt.timestamp and start_date <= new_utt.timestamp and new_utt.timestamp <= end_date:
+            if new_utt.timestamp: # only include utterances with a timestamp
                  self.utts[new_utt.utt_id] = new_utt
                  if user in self.users:
                     self.users[user].utts.append(new_utt)
 
+    def get_utts(self, user=None, start_date=None, end_date=None):
+        
+        if not user:
+            utts = self.utts.values()
+        else:
+            utts = self.users[user].utts
 
-    def generate_network(self, prune=True, normalize_edge_weights=True):
+        return [utt for utt in utts if 
+            (not start_date or start_date <= utt.timestamp) and
+            (not end_date   or end_date >= utt.timestamp)]
+
+    def generate_network(self, prune=True, normalize_edge_weights=True, 
+        start_date=None, end_date=None):
         """
         Crates a NetworkX network whose edges are based on reply pairs within 
         the range of dates. A start/end date of None means on the left/right.
@@ -132,7 +144,7 @@ class Corpus:
         import networkx as nx
 
         net = nx.Graph()
-        utts = self.utts.values()
+        utts = self.get_utts(start_date=start_date, end_date=end_date)
 
         print("Generating network from", len(utts), "utterances...")
         reply_to_unknown_user = 0
@@ -171,21 +183,25 @@ class Corpus:
         return net
 
 
-    def reply_pairs(self, a, b):
+    def reply_pairs(self, a, b, start_date=None, end_date=None):
         """ 
         Gives utterance pairs where user b is replying to user a.
         """
+        a_utts = self.get_utts(user=a, start_date=start_date, end_date=end_date)
+        b_utts = self.get_utts(user=b, start_date=start_date, end_date=end_date)
+
         reply_pairs = []
-        for u2 in self.users[b].utts:
+
+        for u2 in b_utts:
             u1 = u2.reply_to
             if not u1:
                 continue
-            if u1.user_id == a:
+            if u1.user_id in a_utts:
                 reply_pairs.append((u1,u2))
         return reply_pairs
 
 
-    def coordination(self, a, b):
+    def coordination(self, a, b, start_date=None, end_date=None):
         """
         Calculates the coordination of user b towards user a along each marker as 
         in Danescu-Niculescu-Mizil et. al. 2012, equation 2.
@@ -194,7 +210,7 @@ class Corpus:
         to help ensure that only true style matching is being captured. See Danescu-
         Niculescu-Mizil et. al. 2012, footnote 11.
     	"""
-        reply_pairs = self.reply_pairs(a, b) 
+        reply_pairs = self.reply_pairs(a, b, start_date=start_date, end_date=end_date) 
         coord = {m:None for m in markers}
         coord['agg3'] = None
         if not reply_pairs:
@@ -217,22 +233,19 @@ class Corpus:
             coord['agg3'] = sum(coord[m] for m in defined_markers) / len(defined_markers)
         return coord
 
-    def coordination_given(self, a): 
-        coords = {b:self.coordination(b, a) for b in self.users}
+    def coordination_given(self, a, start_date=None, end_date=None): 
+        coords = {b:self.coordination(b, a, start_date=start_date, end_date=end_date) 
+            for b in self.users}
         agg_defined = [b for b in coords if coords[b]['agg3'] is not None]
         if not agg_defined:
-            return None 
-        return sum(coords[b]['agg3'] for b in agg_defined) / len(agg_defined)
+            return None
+        return sum(coord[b]['agg3'] for b in agg_defined) / len(agg_defined)
         
-    def coordination_received(self, a):
-        coords = {b:self.coordination(a, b) for b in self.users} 
+    def coordination_received(self, a, start_date=None, end_date=None):
+        coords = {b:self.coordination(a, b, start_date=start_date, end_date=end_date) 
+            for b in self.users} 
         agg_defined = [b for b in coords if coords[b]['agg3'] is not None]
         if not agg_defined:
             return None 
         return sum(coords[b]['agg3'] for b in agg_defined) / len(agg_defined)
  
-def split_list(data, measure, cutoff):
-    sorted_data = sorted(data, key=lambda x: measure[x], reverse=True)
-    return (sorted_data[0:cutoff], sorted_data[cutoff:])
-
-
