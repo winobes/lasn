@@ -4,7 +4,7 @@ www.cs.cornell.edu/~cristian/Echoes_of_power_files/wikipedia_conversations_corpu
 To get started, create a corpus object by supplying Corpus with a path to the unzipped corpus.
 """
 
-from __future__ import print_fucnction
+from __future__ import print_function
 import re
 from datetime import datetime
 from nltk.tokenize import word_tokenize
