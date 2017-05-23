@@ -124,7 +124,8 @@ class Corpus:
         start_date=None, end_date=None):
         """
         Crates a NetworkX network whose edges are based on reply pairs within 
-        the range of dates. A start/end date of None means on the left/right.
+        the range of dates. A start/end date of None means no time boxing.
+        
         Edge weights are based on the number of reply pairs between users. 
 
         Conversation heads (utterances that are not in reply to anything) give
