@@ -7,6 +7,7 @@ import pickle
 from collections import Counter
 from datetime import datetime
 import networkx as nx
+from nltk import word_tokenize
 
 year_from = 2010
 year_thru = 2012
@@ -205,6 +206,11 @@ class Comment:
         self.timestamp = datetime.fromtimestamp(float(comment_dict['created_utc']))
         self.author = comment_dict['author'] if comment_dict['author'] != '[deleted]' else None
         self.reply_to = comment_dict['parent_id']
+        self.text = comment_dict['body']
+        self.tokenized = word_tokenize(ccomment_dict['body'])
+
+    def exhibits(self, m):
+        return any(f_word in self.tokenized for f_word in markers[m])
 
 
 

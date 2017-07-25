@@ -50,3 +50,13 @@ def mattr(text, window_size=500):
         ttrs.append(len(word_counts) / window_size) 
     return sum(ttrs) / len(ttrs)
 
+
+def split_list(data, measure, cutoff):
+    sorted_data = sorted(data, key=lambda x: measure[x], reverse=True)
+    return (sorted_data[0:cutoff], sorted_data[cutoff:])
+
+
+def get_lines(path):
+    with open(path, 'r') as f:
+        return [line[:-1] for line in f.readlines()]
+
