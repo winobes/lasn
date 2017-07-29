@@ -60,3 +60,17 @@ def get_lines(path):
     with open(path, 'r') as f:
         return [line[:-1] for line in f.readlines()]
 
+def inside_daterange(date, daterange):
+    from_date, thru_date = daterange
+    if not date:
+        return False
+    elif from_date and date < from_date:
+        return False
+    elif thru_date and date > thru_date:
+        return False
+    else:
+        return True
+
+def get_attribute_dict(obj, include_hidden=False):
+    return {attribute: value for attribute, value in vars(obj).items() if not attribute.startswith('_')}
+
