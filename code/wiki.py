@@ -31,6 +31,8 @@ class WikiCorpus(Corpus):
 
         from util import get_lines
 
+        print("Opening corpus files...")
+
         def user_line(line):
             user_id, edit_count, gender, _ = line.split(DELIM)
             data = {'edit_count': edit_count, 'gender': gender}
@@ -39,7 +41,7 @@ class WikiCorpus(Corpus):
         def post_line(line):
             # ignore UNIX timestamp 
             post_id, author_id, talkpage_user, conversation_root, parent_id, \
-                    timestamp, _, clean_text, raw_text  = line.split(DELIM)
+                    timestamp, _, clean_text, raw_text = line.split(DELIM)
             try:
                 timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
             except ValueError:
@@ -100,11 +102,10 @@ class WikiCorpus(Corpus):
 
         print("Loading users...")
         user_args = ['id', 'data']
-                'raw_text', 'tokens', 'data']
         users = {user['id']: User(*(user[arg] for arg in user_args)) for user in tqdm(users)}
 
         print("Loading posts...")
-        post_args = ['id', 'parent_id', 'author_id', 'timestamp', 'clean_text', 
+        post_args = ['id', 'parent_id', 'author_id', 'timestamp', 'clean_text', 'tokens', 'data']
         posts = {post['id']: Post(*(post[arg] for arg in post_args)) for post in tqdm(posts)}
 
         return cls(users, posts, networks)
