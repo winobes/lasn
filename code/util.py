@@ -74,3 +74,7 @@ def inside_daterange(date, daterange):
 def get_attribute_dict(obj, include_hidden=False):
     return {attribute: value for attribute, value in vars(obj).items() if not attribute.startswith('_')}
 
+def div_safe(arr):
+    arr[arr == 0] = np.nan
+    return arr
+

@@ -20,10 +20,14 @@ PICKLE_FILE = "wiki_corpus.pickle"
 CORPUS_DIR  = ("../data/wiki/")
 
 class WikiCorpus(Corpus):
-
     
     def __init__(self, users, posts, networks):
-        super(WikiCorpus, self).__init__(users, posts, networks)
+
+        user_data_fields = ['edit_count', 'gender', 'admin_ascention', 'admin']
+        post_data_fields = ['conversation_root', 'talkpage_user']
+
+        super(WikiCorpus, self).__init__(users, posts, networks,
+                user_data_fields)
 
 
     @classmethod
@@ -35,20 +39,21 @@ class WikiCorpus(Corpus):
 
         def user_line(line):
             user_id, edit_count, gender, _ = line.split(DELIM)
-            data = {'edit_count': edit_count, 'gender': gender}
+            data = {'edit_count': edit_count, 'gender': gender, 
+                    'admin_ascention': None, 'admin': False}
             return User(user_id, data)
 
         def post_line(line):
             # ignore UNIX timestamp 
             post_id, author_id, talkpage_user, conversation_root, parent_id, \
-                    timestamp, _, clean_text, raw_text = line.split(DELIM)
+                    timestamp, _, clean_text, _ = line.split(DELIM)
             try:
                 timestamp = datetime.strptime(timestamp, "%Y-%m-%d %H:%M:%S")
             except ValueError:
                 timestamp = None
             data = {'conversation_root': conversation_root, 'talkpage_user': talkpage_user}
             return Post(post_id, parent_id, author_id, timestamp, 
-                    clean_text, raw_text, tokens=None, data=data)
+                    clean_text, tokens=None, data=data)
 
         
         print("Loading users...")
@@ -88,9 +93,10 @@ class WikiCorpus(Corpus):
         users = [get_attribute_dict(user) for user in self.users.values()]
         posts = [get_attribute_dict(post) for post in self.posts.values()]
         networks = self.networks
+        user_data_fields = self.user_data_fields
         
         with open(path + filename, 'wb') as f:
-            pickle.dump((users, posts, networks), f)
+            pickle.dump((users, posts, networks, user_data_fields), f)
 
 
     @classmethod
@@ -98,7 +104,7 @@ class WikiCorpus(Corpus):
 
         print("Opening pickle...")
         with open(path + filename, 'rb') as f:
-            users, posts, networks = pickle.load(f)
+            users, posts, networks, user_data_fields = pickle.load(f)
 
         print("Loading users...")
         user_args = ['id', 'data']
@@ -108,6 +114,6 @@ class WikiCorpus(Corpus):
         post_args = ['id', 'parent_id', 'author_id', 'timestamp', 'clean_text', 'tokens', 'data']
         posts = {post['id']: Post(*(post[arg] for arg in post_args)) for post in tqdm(posts)}
 
-        return cls(users, posts, networks)
+        return cls(users, posts, networks, user_data_fields)
 
 

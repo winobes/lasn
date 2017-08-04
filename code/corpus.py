@@ -1,7 +1,10 @@
 import networkx as nx
-from util import get_lines, inside_daterange
+from util import get_lines, inside_daterange, div_safe
 from tqdm import tqdm
 import csv
+from collections import defaultdict, Counter
+import warnings
+import numpy as np
 
 
 FWORDS_DIR = '../data/function words/'
@@ -13,13 +16,12 @@ markers = {m: get_lines(FWORDS_DIR + m + '.txt') for m in
 class Post(object):
 
     def __init__(self, id, parent_id, author_id, timestamp, 
-            clean_text, raw_text, tokens=None, data=None):
+            clean_text, tokens=None, data=None):
         self.id = id
         self.parent_id = parent_id
         self.author_id = author_id 
         self.timestamp = timestamp
         self.clean_text = clean_text
-        self.raw_text = raw_text
         self.data = data
         self.tokens = tokens
         self._author = None
@@ -77,7 +79,8 @@ class User(object):
 
 class Corpus(object):
 
-    def __init__(self, users, posts, networks):
+    def __init__(self, users, posts, networks, 
+            user_data_fields=None):
 
         print("Setting up corpus...")
 
@@ -98,12 +101,33 @@ class Corpus(object):
         self.users = users
         self.posts = posts
         self.networks = networks
+        self.user_data_fields = user_data_fields if user_data_fields else []
 
 
     @staticmethod
     def tokenize(post):
         from nltk.tokenize import word_tokenize, sent_tokenize
         return [word_tokenize(sent) for sent in sent_tokenize(post.clean_text)]
+
+
+    def register_user_data(self, field_name, data_dict):
+        self.user_data_fields.append(field_name)
+        for user in self.users:
+            data = data_dict[user] if user in data_dict else None
+            self.users[user].data[field_name] = data
+
+
+    def export_user_data(self, filename, blacklist=None):
+        if not blacklist:
+            blacklist = []
+        data_fields = [f for f in self.user_data_fields if f not in blacklist]
+        header = ['user_id'] + data_fields
+        with open(filename, 'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            for user in self.users.values():
+                data = [user.data[field] for field in data_fields]
+                writer.writerow([user.id] +  data)
 
 
     def generate_network(self, name, criteria=lambda x: True,
@@ -169,13 +193,84 @@ class Corpus(object):
         return net
 
 
-    def export_user_data(self, data_fields, filename):
-        header = ['user_id'] + data_fields
-        with open(filename, 'w') as f:
-            writer = csv.writer(f)
-            writer.writerow(header)
-            for user in self.users.values():
-                data = [user.data[field] if field in user.data else None for field in data_fields]
-                writer.writerow([user.id] +  data)
+    def get_coordination(self, reference_group=None, target_group=None):
+        """
+        Calculates the coordination users give to/receive from users in
+        the reference group.
+        """
 
+        A = list(reference_group) if reference_group else list(self.users.keys())
+        B = list(target_group) if target_group else list(self.users.keys())
+
+        B_to_index = {b: i for i, b in enumerate(B)}
+        marker_list = list(markers.keys())
+
+        # coordination given counts - counting over pairs 
+        # (u_a, u_b) where a in A said u_a and b replied with u_b
+        Am_bm = np.zeros((len(markers), len(B))) # defaultdict(Counter) # count u_a and u_b exhibit m 
+        Am_b  = np.zeros((len(markers), len(B))) # defaultdict(Counter) # count u_a exhibits m
+        A_bm  = np.zeros((len(markers), len(B))) # defaultdict(Counter) # count u_b exhibits m
+        A_b   = np.zeros((len(B),)) # count total number of reply pairs (u_a, u_b)
+
+        # coordination received counts - counting over pairs
+        # (u_b, u_a) where b said u_b and a in A replied with u_a
+        bm_Am = np.zeros((len(markers), len(B))) # defaultdict(Counter) # count u_b and u_a exhibit m 
+        bm_A  = np.zeros((len(markers), len(B))) # defaultdict(Counter) # count u_b exhibits m
+        b_Am  = np.zeros((len(markers), len(B))) # defaultdict(Counter) # count u_a exhibits m
+        b_A   = np.zeros((len(B),)) # Counter() # count total number of reply pairs (u_b, u_a)
+
+        # count marker occurances & instances of alignment among reply pairs
+        print("Gathering marker counts...")
+        for reply in tqdm(self.posts.values()):
+            reply_user = reply.get_author()
+            parent = reply.get_parent()
+            parent_user = parent.get_author() if parent else None
+            if reply_user and parent_user:
+                reply_user = reply_user.id
+                parent_user = parent_user.id
+            else:
+                continue
+            # increment coordination given counts
+            if parent_user in A and reply_user in B: 
+                b_i = B_to_index[reply_user]
+                A_b[b_i] += 1
+                for m_i, m in enumerate(marker_list):
+                    if parent.exhibits_marker(m):
+                        Am_b[m_i,b_i] += 1
+                        if reply.exhibits_marker(m):
+                            Am_bm[m_i,b_i] += 1
+                    if reply.exhibits_marker(m):
+                        A_bm[m_i,b_i] += 1
+
+            # increment coordination received counts
+            if reply_user in A and parent_user in B: 
+                b_i = B_to_index[parent_user]
+                b_A[b_i] += 1
+                for m_i, m in enumerate(marker_list):
+                    if parent.exhibits_marker(m):
+                        bm_A[m_i,b_i] += 1
+                        if reply.exhibits_marker(m):
+                            bm_Am[m_i,b_i] += 1
+                    if reply.exhibits_marker(m):
+                        b_Am[m_i,b_i] += 1
+
+        # calculate the per-marker coordinations
+        coord_given = (Am_bm / div_safe(Am_b)) - (A_bm / div_safe(A_b))
+        coord_received = (bm_Am / div_safe(bm_A)) - (b_Am / div_safe(b_A))
+
+        # calculate the aggrigate (ignoring undefined markers its undefined for)
+        coord_given_agg3 = np.nanmean(coord_given, axis=0)
+        coord_received_agg3 = np.nanmean(coord_received, axis=0)
+
+        # convert back to dictionary output
+        coord_given = {m: {b: coord_given[m_i,b_i] 
+            for b_i, b in enumerate(B)} for m_i, m in enumerate(marker_list)}
+        coord_received = {m: {b: coord_received[m_i,b_i] 
+            for b_i, b in enumerate(B)} for m_i, m in enumerate(marker_list)}
+
+        for b in tqdm(B):
+            coord_given['agg3'] = {b: coord_given_agg3[b_i] for b_i, b in enumerate(B)} 
+            coord_received['agg3'] = {b: coord_received_agg3[b_i] for b_i, b in enumerate(B)} 
+    
+        return coord_given, coord_received
 
