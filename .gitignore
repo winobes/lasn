@@ -1,5 +1,5 @@
 # large corpus objects
-/data/corpus/
+/data/wiki
 *.zip
 
 # Byte-compiled / optimized / DLL files
