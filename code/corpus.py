@@ -28,7 +28,6 @@ class Post(object):
         self._parent = None
         self._corpus = None
 
-
     def get_parent(self):
         return self._parent
 
@@ -59,14 +58,12 @@ class User(object):
         self._posts = []
         self._corpus = None
 
-
     def get_posts(self, date_range=None):
         if date_range:
             posts = [post for post in self._posts if inside_daterange(post.timestamp, date_range)]
         else:
             posts = self._posts
         return posts
-
 
     def replies_to(self, other, date_range=None):
         reply_pairs = []
@@ -103,19 +100,16 @@ class Corpus(object):
         self.networks = networks
         self.user_data_fields = user_data_fields if user_data_fields else []
 
-
     @staticmethod
     def tokenize(post):
         from nltk.tokenize import word_tokenize, sent_tokenize
         return [word_tokenize(sent) for sent in sent_tokenize(post.clean_text)]
-
 
     def register_user_data(self, field_name, data_dict):
         self.user_data_fields.append(field_name)
         for user in self.users:
             data = data_dict[user] if user in data_dict else None
             self.users[user].data[field_name] = data
-
 
     def export_user_data(self, filename, blacklist=None):
         if not blacklist:
@@ -128,7 +122,6 @@ class Corpus(object):
             for user in self.users.values():
                 data = [user.data[field] for field in data_fields]
                 writer.writerow([user.id] +  data)
-
 
     def generate_network(self, name, criteria=lambda x: True,
             prune=True, normalize_edge_weights=True):
@@ -191,7 +184,6 @@ class Corpus(object):
         
         self.networks[name] = net
         return net
-
 
     def get_coordination(self, reference_group=None, target_group=None):
         """
