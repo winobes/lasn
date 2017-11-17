@@ -76,8 +76,7 @@ class User(object):
 
 class Corpus(object):
 
-    def __init__(self, users, posts, networks, 
-            user_data_fields=None):
+    def __init__(self, users, posts, networks, user_data_fields=None):
 
         print("Setting up corpus...")
 

@@ -22,6 +22,9 @@ CORPUS_DIR  = ("../data/wiki/")
 class WikiCorpus(Corpus):
     
     def __init__(self, users, posts, networks):
+        """
+        use `sample` to limit the number of posts for testing purposes
+        """
 
         user_data_fields = ['edit_count', 'gender', 'admin_ascention', 'admin']
         post_data_fields = ['conversation_root', 'talkpage_user']
@@ -31,7 +34,7 @@ class WikiCorpus(Corpus):
 
 
     @classmethod
-    def from_corpus_files(cls, path=CORPUS_DIR):
+    def from_corpus_files(cls, sample=None, path=CORPUS_DIR):
 
         from util import get_lines
 
@@ -78,7 +81,7 @@ class WikiCorpus(Corpus):
         print("Loading posts...")
         posts = {}
         lines = get_lines(path + CONVO_FILE)
-        for line in tqdm(lines):
+        for line in tqdm(lines[:sample]):
             if line.startswith("could not match") or line == "":
                 continue
             new_post = post_line(line)
