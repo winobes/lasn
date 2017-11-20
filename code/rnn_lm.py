@@ -1,6 +1,9 @@
 import wiki
 import pickle
 import random 
+import os
+import argparse
+import json
 
 import torch
 import torch.nn as nn
@@ -11,49 +14,43 @@ import math
 from collections import Counter
 from tqdm import tqdm
 
-DATA_DIR       = '../data/wiki/rnn_lm/'
-TOKENIZER_FILE = 'tokenizer.pickle'
-TRAIN_FILE     = 'train.pickle'
-VAL_FILE       = 'val.pickle'
-TEST_FILE      = 'test.pickle'
-
+criterion = nn.CrossEntropyLoss()  # log of perplexity
+log_interval = 200
+cuda = True
 
 class DataSet:
 
-    def __init__(self, train, val, test, tokenizer, batch_size, max_seq_length):
+    def __init__(self, train, val, test, tokenizer, batch_size, max_seq_len):
         self.tokenizer = tokenizer 
-        print("Encoding data splits...")
         self.train = train 
         self.val   = val 
         self.test  = test
         self.batch_size = batch_size
-        self.max_seq_length = max_seq_length
+        self.max_seq_len = max_seq_len
 
     @classmethod
-    def load(cls, batch_size, max_seq_length):
-        with open(DATA_DIR + TRAIN_FILE, 'rb') as f:
+    def load(cls, data_dir, batch_size, max_seq_len):
+        with open(data_dir + 'train.pickle', 'rb') as f:
             train = pickle.load(f)
-        with open(DATA_DIR + VAL_FILE, 'rb') as f:
+        with open(data_dir + 'val.pickle', 'rb') as f:
             val = pickle.load(f)
-        with open(DATA_DIR + TEST_FILE, 'rb') as f:
+        with open(data_dir + 'test.pickle', 'rb') as f:
             test = pickle.load(f)
-        with open(DATA_DIR + TOKENIZER_FILE, 'rb') as f:
-            token_list = pickle.load(f)
-            tokenizer = Tokenizer(token_list)
-        return cls(train, val, test, tokenizer, batch_size, max_seq_length)
+        tokenizer = Tokenizer.load(data_dir)
+        return cls(train, val, test, tokenizer, batch_size, max_seq_len)
 
-    def save(self):
-        with open(DATA_DIR + TRAIN_FILE, 'wb') as f:
+    def save(self, data_dir):
+        with open(data_dir + 'train.pickle', 'wb') as f:
             pickle.dump(self.train, f)
-        with open(DATA_DIR + VAL_FILE, 'wb') as f:
+        with open(data_dir + 'val.pickle', 'wb') as f:
             pickle.dump(self.val, f)
-        with open(DATA_DIR + TEST_FILE, 'wb') as f:
+        with open(data_dir + 'test.pickle', 'wb') as f:
             pickle.dump(self.test, f)
-        with open(DATA_DIR + TOKENIZER_FILE, 'wb') as f:
+        with open(data_dir + 'tokenizer.pickle', 'wb') as f:
             pickle.dump(self.tokenizer._tokens, f)
 
     @classmethod
-    def from_corpus(cls, max_tokens, batch_size, max_seq_length, sample=None):
+    def from_corpus(cls, max_tokens, batch_size, max_seq_len, data_dir, sample=None):
         """
         use `sample` to limit the number of posts for testing purposes.
         """
@@ -79,11 +76,12 @@ class DataSet:
 
         tokenizer = Tokenizer.fit(train, max_tokens)
 
+        print("Encoding data splits...")
         train = tokenizer.encode_texts(train)
         val   = tokenizer.encode_texts(val)
         test  = tokenizer.encode_texts(test)
 
-        return cls(train, val, test, tokenizer, batch_size, max_seq_length)
+        return cls(train, val, test, tokenizer, batch_size, max_seq_len)
 
     def get_split(self, split):
         if split == 'train':
@@ -96,29 +94,37 @@ class DataSet:
             raise ValueError("No split called {}".format(split))
 
     def count_batches(self, split):
-        return len(self.get_split(split)) // self.batch_size // self.max_seq_length
+        return len(self.get_split(split)) // self.batch_size // self.max_seq_len
 
     def batches(self, split):
 
         data = self.get_split(split)
+        data = batchify(data, self.batch_size)
         evaluation = split in ('val', 'test')
-
-        # Work out how cleanly we can divide the dataset into batches
-        nbatch = data.size(0) // self.batch_size
-        # Trim off any extra elements that wouldn't cleanly fit (remainders).
-        data = data.narrow(0, 0, nbatch * self.batch_size)
-        # Evenly divide the data across the batches.
-        data = data.view(self.batch_size, -1).t().contiguous()
 
         if cuda:
             data = data.cuda()
 
-        for i in range(0, data.size(0) - 1, max_seq_length):
-            seq_len = min(self.max_seq_length, len(data) - 1 - i)
-            inputs = Variable(data[i:i+seq_len], volatile=evaluation)
-            targets = Variable(data[i+1:i+1+seq_len].view(-1))
-            yield inputs, targets 
+        return generate_sequences(data, self.max_seq_len, evaluation)
 
+
+def generate_sequences(data, max_seq_len, evaluation):
+
+    for i in range(0, data.size(0) - 1, max_seq_len):
+        seq_len = min(max_seq_len, len(data) - 1 - i)
+        inputs = Variable(data[i:i+seq_len], volatile=evaluation)
+        targets = Variable(data[i+1:i+1+seq_len].view(-1))
+        yield inputs, targets 
+
+
+def batchify(data, batch_size, cuda=True):
+    # Work out how cleanly we can divide the dataset into batch_size parts.
+    nbatch = data.size(0) // batch_size
+    # Trim off any extra elements that wouldn't cleanly fit (remainders).
+    data = data.narrow(0, 0, nbatch * batch_size)
+    # Evenly divide the data across the batch_size batches.
+    data = data.view(batch_size, -1).t().contiguous()
+    return data
 
 class Tokenizer:                                                                                           
     END_OF_TEXT = '<END OF TEXT>'
@@ -131,10 +137,10 @@ class Tokenizer:
         self.UNKNOWN_TOKEN_INDEX = self._index_map[Tokenizer.UNKNOWN_TOKEN]
         self.END_OF_TEXT_INDEX = self._index_map[Tokenizer.END_OF_TEXT]
                                                                                                          
-    def token_to_index(self, t):                                                                               
+    def token_to_index(self, t):
         return self._index_map.get(t, self.UNKNOWN_TOKEN_INDEX)
                                                                                                          
-    def index_to_token(self, i):                                                                               
+    def index_to_token(self, i):
         return self._tokens[i]
     
     @classmethod                                                                                         
@@ -146,12 +152,19 @@ class Tokenizer:
                 token_count[token] += 1                
         aux_tokens = [Tokenizer.END_OF_TEXT, Tokenizer.UNKNOWN_TOKEN]
         most_common = token_count.most_common(max_tokens - len(aux_tokens))
-        # TODO: add some stats about how many tokens were excluded
         print("{} tokens indexed of {} total tokens".format(len(most_common), len(token_count)))
         print("'{}' is the most common indexed word ({} count).".format(*most_common[0]))
         print("'{}' is the least common indexed word ({} count).".format(*most_common[-1]))
         token_list = aux_tokens + [item[0] for item in most_common]
+        for token in token_list[:10]:
+            print(token)
         return cls(token_list)
+
+    @classmethod
+    def load(cls, data_dir):
+        with open(data_dir + 'tokenizer.pickle', 'rb') as f:
+            tokens = pickle.load(f)
+        return cls(tokens)
 
     def encode_texts(self, texts):        
         num_tokens = sum([len(text) + 1 for text in texts])
@@ -182,6 +195,23 @@ class LSTM(nn.Module):
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, num_layers, dropout=dropout)
         self.final = nn.Linear(hidden_dim, num_tokens)
 
+    @classmethod
+    def load(cls, tokenizer, model_dir):
+        with open(model_dir + 'train_params.txt') as f:
+            args = json.load(f)
+        print(args)
+        model = cls(
+                tokenizer.num_tokens, 
+                args['embedding_dim'], 
+                args['hidden_dim'], 
+                args['num_layers'], 
+                args['dropout'])
+        model.load_state_dict(torch.load(model_dir + 'model.pt'))
+        return model
+
+    def save(self, model_dir):
+        torch.save(self.state_dict(), model_dir + 'model.pt')
+
     def init_weights(self):
         initrange = 0.1
         self.embedding.weight.data.uniform_(-initrange, initrange)
@@ -209,20 +239,47 @@ def repackage_hidden(h):
         return tuple(repackage_hidden(v) for v in h)
 
 
-def evaluate(data, split):
+def perplexity(model, tokenizer, tokens):
+    batch_size = len(tokens)
+    data = tokenizer.encode_texts([tokens])
+    data = data.view(len(data), -1).t().contiguous()
+
+    model.eval()
+    hidden = model.init_hidden(batch_size)
+
+
+    inputs = Variable(data.narrow(1,0,batch_size))
+    targets = Variable(data.narrow(1,1,batch_size).view(-1))
+
+
+
+    output, hidden = model(inputs, hidden)
+    output_flat = output.view(-1, tokenizer.num_tokens)
+    loss = criterion(output_flat, targets).data
+    hidden = repackage_hidden(hidden)
+    return math.exp(loss[0])
+
+
+def evaluate(model, data, num_tokens):
+
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0
-    hidden = model.init_hidden(data.batch_size)
-    for inputs, targets in data.batches(split):
+    hidden = model.init_hidden(32)
+    data = batchify(data, 32)
+    if cuda:
+        data = data.cuda()
+
+    for inputs, targets in generate_sequences(data, 1024, False): 
         output, hidden = model(inputs, hidden)
-        output_flat = output.view(-1, data.tokenizer.num_tokens)
+        output_flat = output.view(-1, num_tokens)
         total_loss += len(inputs) * criterion(output_flat, targets).data
         hidden = repackage_hidden(hidden)
-    return total_loss[0] / len(data.get_split(split))
+
+    return total_loss[0] / len(data)
 
 
-def train(model, dataset, epochs, learning_rate, clip):
+def train(model, dataset, epochs, initial_learning_rate, clip, job_dir):
 
     total_batches = dataset.count_batches('train')
 
@@ -262,7 +319,7 @@ def train(model, dataset, epochs, learning_rate, clip):
     for epoch in range(1, epochs+1):
         epoch_start_time = time.time()
         train_epoch()
-        val_loss = evaluate(dataset, 'val')
+        val_loss = evaluate(model, dataset.get_split('val'), dataset.tokenizer.num_tokens)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} '
               '| valid ppl {:8.2f}'.format(
@@ -270,8 +327,7 @@ def train(model, dataset, epochs, learning_rate, clip):
         print('-' * 89)
         # Save the model if the validation loss is the best we've seen so far.
         if not best_val_loss or val_loss < best_val_loss:
-            with open(DATA_DIR + save_prefix + '_lstm_model.pt', 'wb') as f:
-                torch.save(model, f)
+            model.save(job_dir)
             best_val_loss = val_loss
         else:
             # Anneal the learning rate if no improvement has been seen in the validation dataset.
@@ -279,29 +335,67 @@ def train(model, dataset, epochs, learning_rate, clip):
 
 if __name__ == '__main__':
 
-    max_tokens = 10000
-    embedding_dim = 200
-    hidden_dim = 200
-    num_layers = 2
-    dropout = 0.5
-    initial_learning_rate = 20 
-    batch_size = 128
-    max_seq_length = 32
-    clip = 0.25
-    log_interval = 200
-    criterion = nn.CrossEntropyLoss()
-    cuda = True
-    epochs = 10 # 40
-    save_prefix = 'nov-15a'
+    parser = argparse.ArgumentParser('Create a LSTM from the wiki comment corpus')
+
+    parser.add_argument('job', type=str)
+    parser.add_argument('job_dir', type=str)
+
+    parser.add_argument('--embedding-dim', type=int, default=200)
+    parser.add_argument('--hidden-dim', type=int, default=200)
+    parser.add_argument('--num-layers', type=int, default=2)
+    parser.add_argument('--initial-learning-rate', type=int, default=20)
+    parser.add_argument('--batch-size', type=int, default=64)
+    parser.add_argument('--max-seq-len', type=int, default=32)
+    parser.add_argument('--max-tokens', type=int, default=10000)
+    parser.add_argument('--epochs', type=int, default=10)
+    parser.add_argument('--dropout', type=float, default=0.5)
+    parser.add_argument('--clip', type=float, default=0.25)
+    parser.add_argument('--sample', type=int, default=None)
+
+    args = parser.parse_args()
+
+    job_dir        = '../data/wiki/rnn_lm/' + args.job_dir
+    if not job_dir[-1] == '/':
+        job_dir += '/'
+
+    model_file     = job_dir + 'model.pt'
+    params_file    = job_dir + 'train_params.txt'
+
+    if not os.path.exists(job_dir):
+        os.makedirs(job_dir)
 
     try:
-        dataset = DataSet.load(batch_size, max_seq_length)
+        dataset = DataSet.load(job_dir, args.batch_size, args.max_seq_len)
     except FileNotFoundError:
-        dataset = DataSet.from_corpus(max_tokens, batch_size, max_seq_length)
-        dataset.save()
-        
-    model = LSTM(dataset.tokenizer.num_tokens, embedding_dim, hidden_dim, num_layers, dropout)
-    if cuda:
-        model.cuda()
+       dataset = DataSet.from_corpus(
+                args.max_tokens, 
+                args.batch_size, 
+                args.max_seq_len, 
+                job_dir,
+                sample=args.sample)
+       dataset.save(job_dir)
 
-    train(model, dataset, epochs, initial_learning_rate, clip)
+
+    if args.job == 'train':
+
+        print(args.__dict__)
+        with open(params_file, 'w') as f:
+            json.dump(args.__dict__, f)
+
+        model = LSTM(
+                dataset.tokenizer.num_tokens, 
+                args.embedding_dim, 
+                args.hidden_dim, 
+                args.num_layers, 
+                args.dropout)
+        if cuda:
+            model.cuda()
+
+        train(model, dataset, args.epochs, args.initial_learning_rate, args.clip, job_dir)
+
+
+    elif args.job == 'eval':
+
+        model = LSTM.load(job_dir)
+
+        evaluate(model, dataset.get_split('test'), dataset.tokenizer.num_tokens)
