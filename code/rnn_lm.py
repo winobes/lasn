@@ -170,7 +170,7 @@ class Tokenizer:
         num_tokens = sum([len(text) + 1 for text in texts])
         data = torch.LongTensor(num_tokens)        
         i = 0
-        for text in tqdm(texts):
+        for text in texts:
             for token in text:
                 data[i] = self.token_to_index(token)
                 i += 1
