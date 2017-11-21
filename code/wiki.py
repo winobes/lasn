@@ -22,15 +22,7 @@ CORPUS_DIR  = ("../data/wiki/")
 class WikiCorpus(Corpus):
     
     def __init__(self, users, posts, networks):
-        """
-        use `sample` to limit the number of posts for testing purposes
-        """
-
-        user_data_fields = ['edit_count', 'gender', 'admin_ascention', 'admin']
-        post_data_fields = ['conversation_root', 'talkpage_user']
-
-        super(WikiCorpus, self).__init__(users, posts, networks,
-                user_data_fields, post_data_fields)
+        super(WikiCorpus, self).__init__(users, posts, networks)
 
 
     @classmethod
@@ -108,7 +100,7 @@ class WikiCorpus(Corpus):
 
         print("Opening pickle...")
         with open(path + filename, 'rb') as f:
-            users, posts, networks, user_data_fields, post_data_fields = pickle.load(f)
+            users, posts, networks, user_data, post_data = pickle.load(f)
 
         print("Loading users...")
         user_args = ['id', 'data']
@@ -118,6 +110,14 @@ class WikiCorpus(Corpus):
         post_args = ['id', 'parent_id', 'author_id', 'timestamp', 'clean_text', 'tokens', 'data']
         posts = {post['id']: Post(*(post[arg] for arg in post_args)) for post in tqdm(posts)}
 
-        return cls(users, posts, networks, user_data_fields, post_data_fields)
+        corpus = cls(users, posts, networks)
+
+        for field in user_data:
+            corpus.register_user_data(field, user_data[field])
+            
+        for field in post_data:
+            corpus.register_user_data(field, post_data[field])
+
+        return corpus
 
 
