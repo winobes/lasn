@@ -30,7 +30,7 @@ class WikiCorpus(Corpus):
         post_data_fields = ['conversation_root', 'talkpage_user']
 
         super(WikiCorpus, self).__init__(users, posts, networks,
-                user_data_fields)
+                user_data_fields, post_data_fields)
 
 
     @classmethod
@@ -97,9 +97,10 @@ class WikiCorpus(Corpus):
         posts = [get_attribute_dict(post) for post in self.posts.values()]
         networks = self.networks
         user_data_fields = self.user_data_fields
+        post_data_fields = self.post_data_fields
         
         with open(path + filename, 'wb') as f:
-            pickle.dump((users, posts, networks, user_data_fields), f)
+            pickle.dump((users, posts, networks, user_data_fields, post_data_fields), f)
 
 
     @classmethod
@@ -107,7 +108,7 @@ class WikiCorpus(Corpus):
 
         print("Opening pickle...")
         with open(path + filename, 'rb') as f:
-            users, posts, networks, user_data_fields = pickle.load(f)
+            users, posts, networks, user_data_fields, post_data_fields = pickle.load(f)
 
         print("Loading users...")
         user_args = ['id', 'data']
@@ -117,6 +118,6 @@ class WikiCorpus(Corpus):
         post_args = ['id', 'parent_id', 'author_id', 'timestamp', 'clean_text', 'tokens', 'data']
         posts = {post['id']: Post(*(post[arg] for arg in post_args)) for post in tqdm(posts)}
 
-        return cls(users, posts, networks, user_data_fields)
+        return cls(users, posts, networks, user_data_fields, post_data_fields)
 
 

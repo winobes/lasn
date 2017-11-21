@@ -45,7 +45,6 @@ class Post(object):
         else:
             return [word for sentence in self.tokens for word in sentence]
 
-
     def exhibits_marker(self, m):
         return any(f_word in self.get_tokens() for f_word in markers[m])
 
@@ -76,7 +75,7 @@ class User(object):
 
 class Corpus(object):
 
-    def __init__(self, users, posts, networks, user_data_fields=None):
+    def __init__(self, users, posts, networks, user_data_fields=None, post_data_fields=None):
 
         print("Setting up corpus...")
 
@@ -93,11 +92,12 @@ class Corpus(object):
                 post._parent = posts[post.parent_id]
             if post.author_id in users:
                 post._author = users[post.author_id]
-        
+
         self.users = users
         self.posts = posts
         self.networks = networks
         self.user_data_fields = user_data_fields if user_data_fields else []
+        self.post_data_fields = post_data_fields if post_data_fields else []
 
     @staticmethod
     def tokenize(post):
@@ -110,6 +110,12 @@ class Corpus(object):
             data = data_dict[user] if user in data_dict else None
             self.users[user].data[field_name] = data
 
+    def register_post_data(self, field_name, data_dict):
+        self.post_data_fields.append(field_name)
+        for post in self.posts:
+            data = data_dict[post] if post in data_dict else None
+            self.posts[post].data[field_name] = data
+
     def export_user_data(self, filename, blacklist=None):
         if not blacklist:
             blacklist = []
@@ -121,6 +127,18 @@ class Corpus(object):
             for user in self.users.values():
                 data = [user.data[field] for field in data_fields]
                 writer.writerow([user.id] +  data)
+
+    def export_post_data(self, filename, blacklist=None):
+        if not blacklist:
+            blacklist = []
+        data_fields = [f for f in self.post_data_fields if f not in blacklist]
+        header = ['post_id'] + data_fields
+        with open(filename, 'w') as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            for post in self.posts.values():
+                data = [post.data[field] for field in data_fields]
+                writer.writerow([post.id] +  data)
 
     def generate_network(self, name, criteria=lambda x: True,
             prune=True, normalize_edge_weights=True):
