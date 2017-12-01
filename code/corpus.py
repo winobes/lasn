@@ -10,7 +10,7 @@ import numpy as np
 FWORDS_DIR = '../data/function words/'
 markers = {m: get_lines(FWORDS_DIR + m + '.txt') for m in 
             ['conjunctions', 'articles', 'prepositions', 'adverbs', 'quantifiers', 
-            'impersonal pronouns', 'personal pronouns', 'auxiliary verbs']}
+            'impersonal_pronouns', 'personal_pronouns', 'auxiliary_verbs']}
 
 
 class Post(object):

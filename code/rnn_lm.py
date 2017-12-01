@@ -333,6 +333,21 @@ def train(model, dataset, epochs, initial_learning_rate, clip, job_dir):
             # Anneal the learning rate if no improvement has been seen in the validation dataset.
             learning_rate /= 4.0
 
+
+class Evaluator:
+    """ wraps `perplexity` function to re-use model & tokenizer for many utterances """
+    def __init__(self, model_dir):
+
+        if not model_dir[-1] == '/':
+            model_dir += '/'
+        
+        self.tokenizer = Tokenizer.load(model_dir)
+        self.model = LSTM.load(self.tokenizer, model_dir)
+
+    def perplexity(self, tokenized_text):
+        return perplexity(self.model, self.tokenizer, tokenized_text)
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('Create a LSTM from the wiki comment corpus')
