@@ -1,4 +1,4 @@
-import wiki
+import nltk
 import pickle
 import random 
 import os
@@ -50,13 +50,27 @@ class DataSet:
             pickle.dump(self.tokenizer._tokens, f)
 
     @classmethod
-    def from_corpus(cls, max_tokens, batch_size, max_seq_len, data_dir, sample=None):
+    def from_corpus(cls, max_tokens, batch_size, max_seq_len, sample=None):
         """
         use `sample` to limit the number of posts for testing purposes.
         """
+        corpus_dir = '../data/wiki/'
+        convo_file = 'wikipedia.talkpages.conversations.txt'
+
+        with open(corpus_dir + convo_file) as f:
+            posts = []
+            for line in f.readlines():
+                # parse lines from the conversations file
+                if line.startswith("could not match") or line.strip() == "":
+                    continue
+                post = line.rstrip('\n').split(DELIM)[7]  # clean text
+                posts.append(post)
+
         corpus = wiki.WikiCorpus.from_corpus_files(sample)
          # flatten tokens list since we don't need sentence tokenization for training
         posts = [[token for sentence in post.tokens for token in sentence] for post in corpus.posts.values()]
+
+
         random.shuffle(posts)
         num_posts = len(posts)
         print('{} total posts'.format(num_posts))
