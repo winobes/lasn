@@ -52,7 +52,7 @@ def create_posts():
 
     n = len(posts)
     posts = posts[~(posts.user == '')]
-    print("Filtered {} blank or missing users".format(n - len(posts)))
+    print("Filtered {} posts from blank or missing users".format(n - len(posts)))
 
     return posts
 

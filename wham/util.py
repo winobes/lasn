@@ -7,8 +7,8 @@ MARKER_TYPES = ['conjunctions', 'articles', 'prepositions', 'adverbs', 'quantifi
 MARKERS_DIR = os.path.join(os.path.dirname(__file__), "function words/")
 
 def load_markers():
-    markers = {m: [] for m in MARKER_TYPES}
-    for m in markers:
+    markers = {}
+    for m in MARKER_TYPES:
         with open(os.path.join(MARKERS_DIR, m + '.txt')) as f:
-            markers[m] = [word.rstrip('\n') for word in f.readlines()]
+            markers[m] = [line.rstrip('\n').split(' ') for line in f.readlines()] # tokenize multi-word markers
     return markers

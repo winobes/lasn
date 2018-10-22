@@ -4,12 +4,21 @@ import warnings
 from tqdm import tqdm
 import pandas as pd
 import nltk
+from collections import defaultdict
 
-def tokenize_posts(posts):
+def tokenize_posts(posts, overwrite=False):
     """ Add a 'tokens' column to the posts dataframe """
+
+    if not overwrite and 'tokens' in posts:
+        warnings.warn("Posts are already tokenized. Skipping tokenization.")
+        return posts
+
     tokens = [nltk.tokenize.word_tokenize(text) for text in tqdm(posts['clean_text'], desc="Tokenizing posts.")]
     return posts.assign(tokens=tokens)
 
+def sublists(l, n):
+    """ generate all sublists of length n (where order matters) """
+    return (l[x:x+n] for x in range(len(l) - n + 1))
 
 def detect_markers(posts, markers, overwrite=False):
     """ Add feature columns for marker counts.
@@ -25,13 +34,24 @@ def detect_markers(posts, markers, overwrite=False):
         warnings.warn("All marker columns already exist. Skipping marker detection.")
         return posts
 
-    feature_columns = {m: [False] * len(posts) for m in markers} # TODO: change to counts for WHAM
-    for i, tokens in enumerate(tqdm(posts['tokens']), desc="Detecting markers."):
-        for m in markers:
-            if any(t.lower() in markers[m] for t in tokens):
-                feature_columns[m][i] = True
+    for m in markers:
+
+        # sort the marker instances by length for efficency
+        marker_insts = defaultdict(list)
+        for marker_inst in markers[m]:  
+            marker_insts[len(marker_inst)].append(marker_inst)
+
+        counts = []
+        for i, tokens in enumerate(tqdm(posts['tokens'], desc="Detecting {}.".format(m))):
+            c = 0
+            for m_len in marker_insts:
+                for subseq in sublists(tokens, m_len):
+                    if subseq in marker_insts[m_len]:
+                        c += 1
+            counts.append(c)
+        posts[m] = counts
      
-    return posts.assign(**feature_columns)
+    return posts 
 
 
 def get_reply_pairs(posts, filter_self_replies=True):
