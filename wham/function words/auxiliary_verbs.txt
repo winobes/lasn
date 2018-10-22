@@ -27,3 +27,5 @@ need
 ought
 shall
 should
+'ll
+'d
