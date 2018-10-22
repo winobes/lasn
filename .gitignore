@@ -95,3 +95,6 @@ ENV/
 # pickles
 *.pickle
 *.pkl
+
+# vim 
+*.swp

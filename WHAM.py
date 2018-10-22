@@ -1,32 +1,25 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# In[ ]:
-
+""" Replicating results of Noble & Fernandez, 2015 """
 
 from data import wiki
 from data import corpus
+import wham
 
-from experiments.util import load_markers
 import pandas as pd
 import pystan
 
 
-# In[ ]:
-
-
+## Load posts from the corpus
 posts = wiki.load_posts()
+
+# Count the occurance of markers in each post
+m arkers = wham.load_markers()
+sts = corpus.detect_markers(markers)
+posts = corpus.detect_markers(markers)
+
+# Associate reply pairs
 pairs = corpus.get_reply_pairs(posts)
 
-
-# ## Format the input data for Stan
-
-# In[ ]:
-
-
-
-markers = load_markers()
-
+## Format the input data for Stan
 # merge the marker usage columns for the reply pair
 for m in markers:
     pairs[m] = list(zip(pairs[m+'_a'], pairs[m+'_b']))
@@ -42,12 +35,8 @@ df['marker'] = df['marker'].apply(lambda x: marker_idx[x])
 df = df.pivot_table(index=['user_a', 'user_b', 'marker'], columns='value', aggfunc='size', fill_value=0)
 df = df.reset_index()
 
-# df = df.sample(500)
+df = df.sample(500)
 print(len(df))
-
-
-# In[ ]:
-
 
 data = {
     "NumMarkers": len(markers),
@@ -61,55 +50,24 @@ data = {
 }
 
 
-# ### Compile the Stan model
-
-# In[ ]:
-
-
+## Compile the Stan model
 sm = pystan.StanModel(file='experiments/alignment.cauchy.nosubpop.stan', verbose=True)
 
-
-# ### Fit the Stan model to the data
-# save the paramteer `eta_ab_pop`
-
-# In[ ]:
-
-
+## Sample // fit the model to the data
 import time
-
 start = time.time()
-fit = sm.sampling(data=data, iter=200, pars=['eta_ab_pop'], chains=4)
+fit = sm.sampling(data=data, iter=200, pars=['eta_ab_pop'], chains=2)
 end = time.time()
 print(end - start)
 
-
-# In[ ]:
-
-
-print(fit.stansummary(probs=[.95]))
+print(fit.stansummary())
 print()
 for i, m in marker_idx.items():
     print("{}: {}".format(m, i))
-
-
-# In[ ]:
-
 
 import pickle
 with open('stan_model.pickle', 'wb') as f:
     pickle.dump(sm, f)
 with open('stan_fit.pickle', 'wb') as f:
     pickle.dump(fit, f)
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
 
