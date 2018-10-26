@@ -19,7 +19,9 @@ USERS_DF_FILE = os.path.join(CORPUS_DIR, "users_df.pickle")
 NETWORK_FILE  = os.path.join(CORPUS_DIR, "users_network.pickle")
 
 
-def load_posts(filename=POSTS_DF_FILE):
+def load_posts(filename=POSTS_DF_FILE, recreate=False):
+    if recreate:
+        return create_posts()
     try:
         return pd.read_pickle(filename)
     except FileNotFoundError:
@@ -64,7 +66,12 @@ def save_posts(posts, filename=POSTS_DF_FILE, overwrite=False):
         pd.to_pickle(posts, POSTS_DF_FILE)
 
 
-def create_users():
+def create_users(posts=None):
+    """ Creates users from users corpus file.
+    If `posts` is supplied, 'post_count' is also computed.
+    Users from `posts` who are missing from the users file are included.
+    """
+
     columns = ['user', 'edit_count', 'gender', 'numerical_id']
 
     users = {column: [] for column in columns}
@@ -100,5 +107,9 @@ def create_users():
     admins = pd.DataFrame(data=admins, index=admins['user'], columns=columns)
     users = pd.merge(users, admins, on='user', how='left').set_index('user')
     users['admin'] = users['admin_ascension'].notna()
+
+    # add users from posts file (and post counts), if provided
+    if posts is not None: 
+        users = users.join(posts.assign(post_count=1)[['user', 'post_count']].groupby('user').sum(), how='outer')
 
     return users

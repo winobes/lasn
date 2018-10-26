@@ -2,9 +2,12 @@
 
 import warnings
 from tqdm import tqdm
+
 import pandas as pd
 import nltk
-from collections import defaultdict
+import igraph
+
+from collections import Counter, defaultdict
 
 def tokenize_posts(posts, overwrite=False):
     """ Add a 'tokens' column to the posts dataframe """
@@ -14,7 +17,14 @@ def tokenize_posts(posts, overwrite=False):
         return posts
 
     tokens = [nltk.tokenize.word_tokenize(text) for text in tqdm(posts['clean_text'], desc="Tokenizing posts.")]
-    return posts.assign(tokens=tokens)
+    posts = posts.assign(tokens=tokens)
+
+
+    n = len(posts)
+    posts = posts[posts.tokens.map(len) > 0]
+    print("Filtered {} posts with 0-length utterances".format(n - len(posts)))
+
+    return posts
 
 def sublists(l, n):
     """ generate all sublists of length n (where order matters) """
@@ -30,17 +40,16 @@ def detect_markers(posts, markers, overwrite=False):
     if not 'tokens' in posts:
         raise ValueError("Corpus must be tokenized for marker detection.")
 
+
     if not overwrite and all(m in posts for m in markers):
         warnings.warn("All marker columns already exist. Skipping marker detection.")
         return posts
 
-    for m in markers:
-
+    for m in markers.keys():
         # sort the marker instances by length for efficency
         marker_insts = defaultdict(list)
         for marker_inst in markers[m]:  
             marker_insts[len(marker_inst)].append(marker_inst)
-
         counts = []
         for i, tokens in enumerate(tqdm(posts['tokens'], desc="Detecting {}.".format(m))):
             c = 0
@@ -50,7 +59,7 @@ def detect_markers(posts, markers, overwrite=False):
                         c += 1
             counts.append(c)
         posts[m] = counts
-     
+
     return posts 
 
 
@@ -60,3 +69,53 @@ def get_reply_pairs(posts, filter_self_replies=True):
     if filter_self_replies:
         pairs = pairs[(pairs.user_a != pairs.user_b)]
     return pairs
+
+
+def create_network(reply_pairs):
+    """ Creates an undirected (symmetric), weighted social network based on reply pair counts. """
+
+    directed_edges = Counter(reply_pairs[['user_a', 'user_b']].itertuples(index=False, name=None))
+
+    # for the undirected edge weights, sum the directed communication between each pair
+    undirected_edges = Counter()
+    for (a,b), count in directed_edges.items():
+        if (b,a) in undirected_edges:
+            undirected_edges[(b,a)] += count
+        else:
+            undirected_edges[(a,b)] = count
+            
+    edges = list(undirected_edges.keys())
+    edge_weights = [undirected_edges[e] for e in edges]
+
+    # include both ends of communication in the vertex list
+    vertices = set()
+    for (a, b), count in undirected_edges.items():
+        vertices.add(a)
+        vertices.add(b)
+    vertices = list(vertices)
+
+    g = igraph.Graph()
+    for v in vertices:
+        g.add_vertex(name=v)
+        
+    g.add_edges(edges)
+    g.es['weight'] = edge_weights
+
+    return g
+
+def compute_centrality(users, network, overwrite=False, normalize=False):
+    """ Adds Eigenvector centrality to the users list.
+    Note: users not in the network will have NaN cenrality .
+    """ 
+
+    if not overwrite and 'centrality' in users:
+        warnings.warn("Eigenvector centrality has already been computed. Skipping.")
+        return users
+
+    eigen_list, eigen_value = network.evcent(directed=False, scale=normalize, weights='weight', return_eigenvalue=True)
+    vertices = [v['name'] for v in network.vs]
+    centrality = pd.DataFrame(data = eigen_list, index=vertices, columns=['centrality'])
+    print("Computed eigenvector centrality for {} users. Eigenvalue was {}.".format(len(eigen_list), eigen_value))
+
+    return users.join(centrality, how='left')
+
