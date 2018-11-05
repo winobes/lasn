@@ -50,7 +50,7 @@ markers = wham.load_markers()
 reply_pairs = pairs.join(users, on='user_a')
 subpops_column = 'highly_central'
 default = False
-sample=500
+sample=10000
 
 reply_pairs['len_b'] = reply_pairs.tokens_b.apply(len)
 

@@ -52,15 +52,6 @@ users.highly_central.value_counts()
 # In[ ]:
 
 
-get_ipython().run_line_magic('matplotlib', 'inline')
-import math 
-cs = ['green' if admin else 'blue' for admin in users.highly_central]
-users.plot.scatter('post_count', 'centrality', c=cs)
-
-
-# In[ ]:
-
-
 markers = wham.load_markers()
 reply_pairs = pairs.join(users, on='user_a')
 subpops_column = 'admin'

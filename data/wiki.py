@@ -104,12 +104,13 @@ def create_users(posts=None):
             for column, value in line.items():
                 admins[column].append(value)
                 
-    admins = pd.DataFrame(data=admins, index=admins['user'], columns=columns)
-    users = pd.merge(users, admins, on='user', how='left').set_index('user')
-    users['admin'] = users['admin_ascension'].notna()
-
     # add users from posts file (and post counts), if provided
     if posts is not None: 
         users = users.join(posts.assign(post_count=1)[['user', 'post_count']].groupby('user').sum(), how='outer')
+
+    # add adminship data
+    admins = pd.DataFrame(data=admins, index=admins['user'], columns=columns)
+    users = pd.merge(users, admins, on='user', how='left').set_index('user')
+    users['admin'] = users['admin_ascension'].notna()
 
     return users

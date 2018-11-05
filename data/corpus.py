@@ -15,15 +15,26 @@ def tokenize_posts(posts, overwrite=False):
     if not overwrite and 'tokens' in posts:
         warnings.warn("Posts are already tokenized. Skipping tokenization.")
         return posts
-
+    
     tokens = [nltk.tokenize.word_tokenize(text) for text in tqdm(posts['clean_text'], desc="Tokenizing posts.")]
     posts = posts.assign(tokens=tokens)
-
 
     n = len(posts)
     posts = posts[posts.tokens.map(len) > 0]
     print("Filtered {} posts with 0-length utterances".format(n - len(posts)))
 
+    return posts
+
+def pos_tag_posts(posts, overwrite=False):
+    """ Add a 'pos_tags' column to the posts dataframe """
+
+    if not overwrite and 'pos_tags' in posts:
+        warnings.warn("Posts are already PoS tagged. Skipping tagging.")
+        return posts
+    
+    pos = posts.tokens.progress_apply(nltk.pos_tag)
+    posts['pos_tags'] = pos.apply(lambda pos_list: list(map(lambda t: t[1], pos_list)))
+    
     return posts
 
 def sublists(l, n):
