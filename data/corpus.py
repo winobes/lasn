@@ -2,8 +2,10 @@
 
 import warnings
 from tqdm import tqdm
+import os
 
 import pandas as pd
+import numpy as np
 import nltk
 import igraph
 
@@ -81,7 +83,6 @@ def get_reply_pairs(posts, filter_self_replies=True):
         pairs = pairs[(pairs.user_a != pairs.user_b)]
     return pairs
 
-
 def create_network(reply_pairs):
     """ Creates an undirected (symmetric), weighted social network based on reply pair counts. """
 
@@ -114,19 +115,49 @@ def create_network(reply_pairs):
 
     return g
 
-def compute_centrality(users, network, overwrite=False, normalize=False):
+def compute_centrality(users, network, log_normalize=False):
     """ Adds Eigenvector centrality to the users list.
     Note: users not in the network will have NaN cenrality .
     """ 
 
-    if not overwrite and 'centrality' in users:
+    if 'centrality' in users:
         warnings.warn("Eigenvector centrality has already been computed. Skipping.")
         return users
 
-    eigen_list, eigen_value = network.evcent(directed=False, scale=normalize, weights='weight', return_eigenvalue=True)
+    eigen_list, eigenvalue = network.evcent(directed=False, scale=False, weights='weight', return_eigenvalue=True)
+    print("Computed eigenvector centrality for {} users. Eigenvalue was {}.".format(len(eigen_list), eigenvalue))
     vertices = [v['name'] for v in network.vs]
-    centrality = pd.DataFrame(data = eigen_list, index=vertices, columns=['centrality'])
-    print("Computed eigenvector centrality for {} users. Eigenvalue was {}.".format(len(eigen_list), eigen_value))
+    c = pd.Series(eigen_list, index=vertices)
+    c = c.replace({0: np.nan}) # igraph sets disconnected nodes centrality to 0 but NaN is better for us.
 
-    return users.join(centrality, how='left')
+    if c.min() <= 0 or eigenvalue <= 0:
+        ValueError("Min centrality was {} and eigenvalue was {}... could not find eigenvalue?".format(c.min(), eigenvalue))
 
+    if log_normalize:
+        from math import log
+        print("Un-normalized range: [{},{}]".format(c.min(),c.max()))
+        c = c[c.notna()]
+        assert not any(c==0) 
+        c = c.apply(lambda x: log(x))
+        c_min, c_max = c.min(), c.max()  # do 0 centrality (disconnected users) for norming purposes
+        c = c.apply(lambda x: (x - c_min) / (c_max - c_min))
+        print("Log-normalized range: [{},{}]".format(c.min(),c.max()))
+
+    users['centrality'] = c
+    return users
+
+
+def load_network(reply_pairs=None, recreate=False, filename=None):
+    try:
+        if recreate:
+            return create_network(reply_pairs) 
+        else: 
+            return igraph.Graph.Read_Pickle(filename)
+    except TypeError:
+        return create_network(reply_pairs) 
+
+def save_network(network, overwrite=False, filename=None):
+    if os.path.isfile(filename) and not overwrite:
+        warnings.warn("{} already exists. Not overwriting.".format(filename))
+    else:
+        network.write_pickle(filename)

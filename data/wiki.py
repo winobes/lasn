@@ -4,12 +4,15 @@ import os
 import warnings
 from tqdm import tqdm
 from datetime import datetime
+
 import nltk
 import pandas as pd
 import numpy as np
 
-DELIM         = " +++$+++ "
+from .corpus import load_network as __load_network
+from .corpus import save_network as __save_network
 
+DELIM         = " +++$+++ "
 CORPUS_DIR    = os.path.join(os.path.dirname(__file__), "wiki/")
 CONVO_FILE    = os.path.join(CORPUS_DIR, "wikipedia.talkpages.conversations.txt")
 USERS_FILE    = os.path.join(CORPUS_DIR, "wikipedia.talkpages.userinfo.txt")
@@ -50,7 +53,7 @@ def create_posts():
             for column, value in line.items():
                 posts[column].append(value)
                 
-    posts = pd.DataFrame(data=posts, index=posts['utterance_id'], columns=columns, dtype=str)
+    posts = pd.DataFrame(data=posts, index=posts['utterance_id'], columns=columns)
 
     n = len(posts)
     posts = posts[~(posts.user == '')]
@@ -73,7 +76,6 @@ def create_users(posts=None):
     """
 
     columns = ['user', 'edit_count', 'gender', 'numerical_id']
-
     users = {column: [] for column in columns}
     with open(USERS_FILE) as f:
         for line in tqdm(f.readlines(), desc="Reading users file."):
@@ -82,11 +84,15 @@ def create_users(posts=None):
             line = {column: value for column, value in zip(columns, line)}
             for column, value in line.items():
                 users[column].append(value)
-                
-    users = pd.DataFrame(data=users, index=users['user'], columns=columns)
+    users = pd.DataFrame(data=users, columns=columns)
 
+    # add users from posts file (and post counts), if provided
+    if posts is not None: 
+        post_counts = posts.assign(post_count=1)[['user', 'post_count']].groupby('user').sum().reset_index()
+        users = pd.merge(users, post_counts, on='user', how='outer')
+
+    # add adminship information
     columns = ['user', 'admin_ascension']
-
     admins = {column: [] for column in columns}
     with open(ADMINS_FILE) as f:
         for line in tqdm(f.readlines(), desc="Reading admins file."):
@@ -94,23 +100,41 @@ def create_users(posts=None):
             line = ' '.join(line[:-1]), line[-1]
             assert(len(line) == len(columns))
             line = {column: value for column, value in zip(columns, line)}
-                
+
             # convert timestamps to datetime objects
             try:
                 line['admin_ascension'] = datetime.strptime(line['admin_ascension'], "%Y-%m-%d")
             except ValueError:
                 line['admin_ascension'] = None
-                
             for column, value in line.items():
                 admins[column].append(value)
-                
-    # add users from posts file (and post counts), if provided
-    if posts is not None: 
-        users = users.join(posts.assign(post_count=1)[['user', 'post_count']].groupby('user').sum(), how='outer')
+    admins = pd.DataFrame(admins)
+    users = pd.merge(users, admins, on='user', how='left')
+    users['admin'] = users['admin_ascension'].notna() # add binary admin category
 
-    # add adminship data
-    admins = pd.DataFrame(data=admins, index=admins['user'], columns=columns)
-    users = pd.merge(users, admins, on='user', how='left').set_index('user')
-    users['admin'] = users['admin_ascension'].notna()
-
+    users = users.set_index('user')
     return users
+
+
+def load_users(posts=None, filename=USERS_DF_FILE, recreate=False):
+    if recreate:
+        return create_users(posts=posts)
+    try:
+        return pd.read_pickle(filename)
+    except FileNotFoundError:
+        return create_users(posts=posts)
+
+
+def save_users(users, filename=USERS_DF_FILE, overwrite=False):
+    if os.path.isfile(filename) and not overwrite:
+        warnings.warn("{} already exists. Not overwriting.".format(filename))
+    else:
+        pd.to_pickle(users, USERS_DF_FILE)
+
+
+def load_network(reply_pairs=None, recreate=False, filename=NETWORK_FILE):
+    return __load_network(reply_pairs, recreate, filename) 
+
+
+def save_network(network, overwrite=False, filename=NETWORK_FILE):
+    __save_network(network, overwrite, filename)

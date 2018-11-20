@@ -3,3 +3,6 @@ numpy
 nltk
 pystan
 tqdm
+python-igraph
+ipywidgets
+matplotlib
