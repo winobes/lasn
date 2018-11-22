@@ -4,7 +4,7 @@
 
 from data import wiki
 from data import corpus
-import wham
+import alignment 
 
 import pystan
 import pandas as pd
@@ -32,7 +32,7 @@ data = {
 }
 
 ## Compile the Stan model
-sm = pystan.StanModel(file='wham/alignment.cauchy.stan', verbose=True)
+sm = pystan.StanModel(file='alignment/alignment.cauchy.stan', verbose=True)
 
 ## Sample // fit the model to the data
 import time

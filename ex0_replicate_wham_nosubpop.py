@@ -2,19 +2,19 @@
 
 from data import wiki
 from data import corpus
-import wham
+import alignment 
 
 posts = wiki.load_posts()
 posts = corpus.tokenize_posts(posts)
 
-markers = wham.load_markers()
+markers = alignment.load_markers()
 posts = corpus.detect_markers(posts, markers)
 
 print("getting reply pairs")
 pairs = corpus.get_reply_pairs(posts)
 
 print("fitting model")
-model, fit = wham.fit_wham_nosubpops(pairs, markers, sample=500)
+model, fit = alignment.fit_wham_nosubpops(pairs, markers, sample=500)
 
 print(fit.stansummary())
 print()
