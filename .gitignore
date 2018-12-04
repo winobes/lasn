@@ -98,3 +98,6 @@ ENV/
 
 # vim 
 *.swp
+
+# mac
+*.DS_Store
