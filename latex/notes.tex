@@ -1,0 +1,117 @@
+\documentclass[12pt]{scrartcl}
+
+\usepackage[]{natbib}
+\usepackage{amsmath}
+\usepackage{enumitem}
+\usepackage{hyperref}
+
+\title{Linguistic alignment in social networks}
+\subtitle{Work in progress // Notes}
+
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\section{Background}
+
+\subsection{Marker-based linguistic style alignment}
+\cite{tausczik_psychological_2010,niederhoffer_linguistic_2002}
+
+\subsection{Marker-based metrics}
+\subsubsection{Early metrics}
+
+\cite{ireland_language_2011} used the ratio of the speakers' marker frequency to measure style alignment.
+
+\[
+LSM^m = 1 - \frac{{count(a,m) - count(b,m)}}{count(a,m) + count(b,m) + .00001}
+\]
+This is not a measure of coordination, since there is analysis of whether $a$'s use of $m$ \emph{triggers} $b$'s use.
+Rather this merely measures how well aligned their rates of $m$-use are.
+
+There is also no accounting for the speakers' baseline marker use, or attempt to quantify convergence, so the measure is subject to affinity effects.
+
+\paragraph{Subtractive conditional probability}
+\begin{itemize}
+	\item First used?: \cite{danescu-niculescu-mizil_mark_2011}
+	\item Refined: \cite{danescu-niculescu-mizil_echoes_2012}
+\end{itemize}
+
+
+\paragraph{Graphical models}
+\begin{itemize}
+  \item HAM: \cite{doyle_investigating_2016}
+  \item WHAM: \cite{doyle_robust_2016}
+  \item SWAM: \cite{shin_alignment_2018}
+\end{itemize}
+
+
+\paragraph{Other approaches // criticism}
+\begin{itemize}
+\item \cite{gao_understanding_2015} -- information theoretic approach
+\item \cite{xu_not_2018} -- message length confound; regression model
+\end{itemize}
+
+
+\section{Metrics and methods}
+
+\section{Coordination metric}
+
+The goal is to combine the features we like from SCP:
+\begin{itemize}
+	\item easy to compute
+	\item possibility of per-utterance analysis
+\end{itemize}
+with those we like from WHAM:
+\begin{itemize}
+	\item word-based (so, response-length insensitive)
+	\item universal (per-user) marker frequency baselines 
+\end{itemize}
+
+Given a "reply pair" $(u_a, u_b)$ of utterances by speakers $a$ and $b$, where $u_b$ is an immediate reply to $u_b$, we define the coordination of utterance $u_b$ along marker $m$ in terms of the surprisal contained in the number of $m$-tokens appearing in $u_b$.
+
+To measure surprisal, we assume that $b$ produces $m$-tokens according to a Bernouli distribution (i.e., bag of words assumption) estimated by $b$'s baseline $m$-token frequency, $f^m$, over all of their utterances.
+
+The surprisal with respect to $m$ is then:
+\[
+	\log_2\big(Binom(c;f^m,l)\big) = \log_2\Big[\binom{len(u_b)}{c} f^{c}(1-f)^{l-c}\Big]
+\]
+where $c$ is the count of $m$-tokens in $u_b$, and $l$ is the length (in tokens) of $u_b$.
+
+Given this surprisal score, we need to take into account two factors that affect its polarity with respect to coordination.
+\begin{enumerate}
+	\item whether the numeber of $m$-tokens in $u_b$ was higher or lower than the expected value based on $b$'s baseline, and
+	\item whether $u_a$ contained any $m$-tokens
+\end{enumerate}
+
+\section{Experiments \& results}
+
+\subsection{High level style features \& Utterance perplexity} % 22/06/17
+
+\href{https://github.com/winobes/lasn/blob/2991fdaa0023e038452dbfe13d0d325bb1783dfa/code/analysis.ipynb}{Notebook}
+
+\paragraph{Comparing linguistic style between admins/non-admins and high/low centrality users.} Linguistic style is measured by type-token ratio and function word/content word ratio. There are significant differences for both for each group, but the type-token has the more sizable effect size (very large actually! I'm not sure why it's so large.)
+
+\paragraph{Scatterplots of perplexity of utterance v.s. days since first post.} We had discussed it might be nice to graph since maybe the relationship isn't linear. Indeed there appears to be something like a logarithmic relationship (which upon reflection makes a good deal of sense). I noticed there are a bunch of posts with the exact same perplexity at several points. I think these represent some common one or two-word posts. I'm not sure if it's justified to remove them or not, or if there is good reason to other than that they're ugly.
+
+\subsection{}
+
+\subsection{Formatting style features of (very) highly central users} % 27/11/17
+\paragraph{Italics}
+Non-admins have a higher rate of italics usage than non-admins (0.31 vs. 0.15, p<0.01)
+Low-centrailty users have a higher rate of italics usage than highly-central users (0.26 vs 0.11, p<0.001)
+
+\paragraph{Bold}
+Non-admins have a higher rate of bold usage than admins (0.18 vs 0.10, p<0.01)
+Low-centrality users have ahigher rate of bold usage than high-centrality users (0.17 vs. 0.02, p<0.01)
+
+\paragraph{Links}
+Non-admins have a higher rate of link usage than admins (0.14 vs 0.03, p<0.01)
+Low-centrality users have a higher rate of link usage than high-centrality users (0.11 vs 0.02, p<0.01
+
+\bibliographystyle{abbrvnat}
+\bibliography{notes}
+
+
+\end{document}
+  
