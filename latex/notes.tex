@@ -4,6 +4,12 @@
 \usepackage{amsmath}
 \usepackage{enumitem}
 \usepackage{hyperref}
+\usepackage[dvipsnames]{xcolor}
+
+\setlist{noitemsep}
+
+\newcommand{\bill}[1]{\textcolor{Dandelion}{#1}}
+\newcommand{\raquel}[1]{\textcolor{SkyBlue}{#1}}
 
 \title{Linguistic alignment in social networks}
 \subtitle{Work in progress // Notes}
@@ -13,60 +19,115 @@
 \begin{document}
 \maketitle
 
-\section{Background}
+\section{References // Background}
 
-\subsection{Marker-based linguistic style alignment}
-\cite{tausczik_psychological_2010,niederhoffer_linguistic_2002}
+\subsection{Linguistic style alignment}
+\begin{itemize}
+  \item Examples of alignment -- phonetic production \citep{kim_phonetic_2011,babel_evidence_2012}, lexical choice \citep{brennan_conceptual_1996}, use of function words \citep{niederhoffer_linguistic_2002}, syntactic constructions \citep{pickering_structural_2008}. 
+  \item Alignment is motivated by mutual understanding / common ground -- \cite{clark_using_1996,clark_audience_1982,brennan_conceptual_1996,brennan_partner-specific_2009}
+  \item Alignment is explained by stimulus response priming --  \cite{pickering_interactive-alignment_2004,branigan_syntactic_1995,pickering_alignment_2006,reitter_alignment_2014} 
+  \item{\cite{muir_characterizing_2016} -- psychology experiment on linguistic style accommodation with 144 face-to-face dyads; manipulated social power \& personality traits}
+\end{itemize}
 
-\subsection{Marker-based metrics}
-\subsubsection{Early metrics}
+\subsection{Marker-based measures of linguistic style alignment}
+Markers: \cite{tausczik_psychological_2010,niederhoffer_linguistic_2002}
 
-\cite{ireland_language_2011} used the ratio of the speakers' marker frequency to measure style alignment.
+\subsubsection{Linguistic style matching}
+
+\cite{ireland_language_2011} uses the ratio of two speakers' marker frequency to measure their style alignment.
 
 \[
 LSM^m = 1 - \frac{{count(a,m) - count(b,m)}}{count(a,m) + count(b,m) + .00001}
 \]
-This is not a measure of coordination, since there is analysis of whether $a$'s use of $m$ \emph{triggers} $b$'s use.
-Rather this merely measures how well aligned their rates of $m$-use are.
+This is not really a measure of coordination since there is no analysis of whether $a$'s use of $m$ \emph{triggers} $b$'s use.
+Instead, it just measures how well aligned $a$ and $b$'s rates of $m$-use are.
+There is no accounting for the speakers' baseline marker use.
+They also do not attempt to quantify convergence, instead taking the marker use rates over an entire conversation.
 
-There is also no accounting for the speakers' baseline marker use, or attempt to quantify convergence, so the measure is subject to affinity effects.
+\subsubsection{Subtractive conditional probability}
 
-\paragraph{Subtractive conditional probability}
 \begin{itemize}
-	\item First used?: \cite{danescu-niculescu-mizil_mark_2011}
-	\item Refined: \cite{danescu-niculescu-mizil_echoes_2012}
+  \item first defined by \cite{danescu-niculescu-mizil_mark_2011}
+  \item adapted to a group setting by \cite{danescu-niculescu-mizil_echoes_2012}.
+\end{itemize}
+
+The goal is to determine for a given user pair of speakers $a$ and $b$ and stylistic marker $m$, if $a$'s use of $m$ increases the probability that $b$ will use $m$ (beyond the baseline probability of $m$ for $b$).
+Given a set of exchanges where $u_a$ is an utterance by speaker $a$ and $u_b$ is an utterance by $b$, the coordination of $b$ towards $a$ along marker $m$ is defined as:
+\[
+  C^m(b,a) = P(\mathcal{E}^{m}_{u_b} \mid \mathcal{E}^m_{u_a}) - P(\mathcal{E}^m_{u_b})
+\]
+where the conditional probability and the baseline probability are both estimated from the set of exchanges where $b$ replies to $a$.
+
+$C^m(b,a)$ is undefined if no $u_a$ exhibits $m$.
+
+Coordination towards a group $A$ is defined by simply modifying the set of exchanges used to estimate probabilities to include any pair of utterances where $b$ replies to any user $a\in A$.
+
+$C(B,A)$ is computed by first taking the macro average across markers, $C(b,A) = \sum_m C^m(b,A)$, and then taking the average across $b\in B$.
+The authors give three ways of dealing with missing data when aggregating across markers:
+\begin{itemize}
+  \item Agg1 -- only consider $C(b,A)$ where $C^m(b,A)$ is defined for every $m$.
+  \item Agg2 -- if $C^m(b,A)$ is undefined, smooth with $C^m(B,A)$
+  \item Agg3 -- if $C^m(b,A)$ is undefined, smooth with the average of $C^{m'}(b,A)$ where $m'$ is defined
+\end{itemize}
+
+\subsubsection{Graphical models}
+
+The Hierarchical Alignment Model (HAM) \citep{doyle_investigating_2016} defines alignment along $m$ as a linear effect on the log-odds of a reply containing $m$, estimated via Bayesian inference.
+
+\[
+  C^m(b,a) = logit^{-1}(P(\mathcal{E}^m_{u_b} \mid \mathcal{E}^m_{u_a})) - logit^{-1}(P(\mathcal{E}^m_{u_b} \mid \lnot \mathcal{E}^m_{u_a}))
+\]
+
+\bill{I couldn't find anything about the rationale for adding the no-$m$-in-$u_a$ conditional to the baseline estimation (subtractive component)} 
+
+It seeks to improve on SCP in two ways:
+\begin{enumerate}
+  \item Consistency across marker frequencies -- SCP is sensitive to differences in (speaker independent) marker frequencies. This means it is not possible to compare SCP alignment scores across markers. HAM solves this problem by computing the alignment score in log-odds space.
+  \item Robustness to sparse data -- SCP has only been applied to conversations with at least 10 messages \bill{(I don't think  \cite{danescu-niculescu-mizil_echoes_2012} says anything about this)}. HAM is designed to work with tweets where there might only be one reply pair between a given pair of users. The hierarchical prior on alignments (parametrized by marker and by dyad) assumes similar alignment matters across dyads for a given marker. 
+\end{enumerate}
+
+Variations:
+\begin{itemize}
+  \item Word-based Hierarchical Alignment Model (WHAM) \citep{doyle_robust_2016} -- count proportion of $m$-tokens in $u_b$ (rather than binary presence). Corrects for ``artificial'' reply-length effects, but not the priming decay effect noted by Reitter et al (2006, 2008).
+  \item SWAM \citep{shin_alignment_2018} -- removes the hierarchy of normal distributions in WHAM, which ``improve signal detection when group dynamics are subtle or group membership is difficult to determine''. 
+\end{itemize}
+
+``Due to the shortness of the messages, attempting to use marker counts normalized by message length could even introduce noise and weaken robustness to sparse data.''
+
+
+\subsubsection{Other approaches // criticism}
+\begin{itemize}
+  \item \cite{gao_understanding_2015} -- information theoretic approach that uses mutual information to measure dependence of $m$-usage in $u_b$ on $m$-usage in $u_a$. They also condition on message length and find that style coordination reported in other studies is partially attributed to message length coordination. \bill{It seems this method cannot distinguish between positive and negative coordination -- just degree of random variable dependence}.
+  \item \cite{xu_not_2018} -- low-level priming explains alignment better than sociolinguistic factors \bill{(false dichotomy?)}; message length confound; linear regression model
+\end{itemize}
+
+\subsection{Other}
+\begin{itemize}
+  \item \cite{hamilton_loyalty_2017} -- Reddit users ``employ language that signals collective identity''
+  \item \cite{cocco_discourse_2012} -- text type clustering using PoS n-grams 
+  \item \cite{hua_wikiconv:_2018} -- larger wiki talkpages corpus (including article talkpages), supposedly better preprocessing; also includes intermediate states (e.g., comments that were later deleted) \bill{we decided it's not worth using this over the original DNM talkpages corpus}
+\end{itemize}
+
+\subsection{Social network analysis}
+\begin{itemize}
+  \item \cite{traag_louvain_2018} -- Leiden clustering -- improvement on Louvain community detection for social networks.
 \end{itemize}
 
 
-\paragraph{Graphical models}
-\begin{itemize}
-  \item HAM: \cite{doyle_investigating_2016}
-  \item WHAM: \cite{doyle_robust_2016}
-  \item SWAM: \cite{shin_alignment_2018}
-\end{itemize}
-
-
-\paragraph{Other approaches // criticism}
-\begin{itemize}
-\item \cite{gao_understanding_2015} -- information theoretic approach
-\item \cite{xu_not_2018} -- message length confound; regression model
-\end{itemize}
-
-
-\section{Metrics and methods}
-
-\section{Coordination metric}
+\section{New coordination metric(s)}
 
 The goal is to combine the features we like from SCP:
 \begin{itemize}
-	\item easy to compute
-	\item possibility of per-utterance analysis
+	\item easy to compute -- probabilities estimated directly instead of sampling
+  \item possibility of per-utterance analysis (i.e., which specific utterances exemplify the most alignment?)
 \end{itemize}
 with those we like from WHAM:
 \begin{itemize}
-	\item word-based (so, response-length insensitive)
-	\item universal (per-user) marker frequency baselines 
+	\item word-based (so, response-length insensitive/normalized)
+  \item universal (per-user) marker frequency baselines (why estimate a $b$'s baseline $m$-usage with only on $(a,b)$ pairs -- why not use all $b$-utterances?)
 \end{itemize}
+
+\subsection{Information theoretic metric}
 
 Given a "reply pair" $(u_a, u_b)$ of utterances by speakers $a$ and $b$, where $u_b$ is an immediate reply to $u_b$, we define the coordination of utterance $u_b$ along marker $m$ in terms of the surprisal contained in the number of $m$-tokens appearing in $u_b$.
 
@@ -80,8 +141,16 @@ where $c$ is the count of $m$-tokens in $u_b$, and $l$ is the length (in tokens)
 
 Given this surprisal score, we need to take into account two factors that affect its polarity with respect to coordination.
 \begin{enumerate}
-	\item whether the numeber of $m$-tokens in $u_b$ was higher or lower than the expected value based on $b$'s baseline, and
+	\item whether the number of $m$-tokens in $u_b$ was higher or lower than the expected value based on $b$'s baseline, and
 	\item whether $u_a$ contained any $m$-tokens
+\end{enumerate}
+
+\subsection{Word-based SCP}
+
+Like SCP but except
+\begin{enumerate}
+  \item Like in WHAM, use $m$-frequency for $u_b$ rather than binary presence/absence (but still use binary $m$-presence for priming stimulus in $u_a$)
+  \item Estimate $P(\mathcal{E}^m_{u_b})$ by summing across all of $b$'s utterances -- not just those in reply to $a$.
 \end{enumerate}
 
 \section{Experiments \& results}
@@ -99,19 +168,18 @@ Given this surprisal score, we need to take into account two factors that affect
 \subsection{Formatting style features of (very) highly central users} % 27/11/17
 \paragraph{Italics}
 Non-admins have a higher rate of italics usage than non-admins (0.31 vs. 0.15, p<0.01)
-Low-centrailty users have a higher rate of italics usage than highly-central users (0.26 vs 0.11, p<0.001)
+Low-centrality users have a higher rate of italics usage than highly-central users (0.26 vs 0.11, p<0.001)
 
 \paragraph{Bold}
 Non-admins have a higher rate of bold usage than admins (0.18 vs 0.10, p<0.01)
-Low-centrality users have ahigher rate of bold usage than high-centrality users (0.17 vs. 0.02, p<0.01)
+Low-centrality users have higher rate of bold usage than high-centrality users (0.17 vs. 0.02, p<0.01)
 
 \paragraph{Links}
 Non-admins have a higher rate of link usage than admins (0.14 vs 0.03, p<0.01)
 Low-centrality users have a higher rate of link usage than high-centrality users (0.11 vs 0.02, p<0.01
 
-\bibliographystyle{abbrvnat}
+\bibliographystyle{humannat}
 \bibliography{notes}
-
 
 \end{document}
   
