@@ -3,13 +3,29 @@
 \usepackage[]{natbib}
 \usepackage{amsmath}
 \usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{float}
 \usepackage{hyperref}
+\usepackage{graphicx}
 \usepackage[dvipsnames]{xcolor}
+\usepackage[paperwidth=210mm,
+            paperheight=297mm,
+            left=50pt,
+            top=50pt,
+            textwidth=345pt,
+            marginparsep=25pt,
+            marginparwidth=124pt,
+            textheight=692pt,
+            footskip=50pt]
+           {geometry}
+\usepackage[textsize=footnotesize]{todonotes}
+%\usepackage{showframe}
 
+\graphicspath{ {./figures/} }
 \setlist{noitemsep}
 
-\newcommand{\bill}[1]{\textcolor{Dandelion}{#1}}
-\newcommand{\raquel}[1]{\textcolor{SkyBlue}{#1}}
+\newcommand{\bill}[1]{\todo[color=blue!40]{#1}}
+\newcommand{\raquel}[1]{\todo[color=orange!40]{#1}}
 
 \title{Linguistic alignment in social networks}
 \subtitle{Work in progress // Notes}
@@ -86,19 +102,27 @@ It seeks to improve on SCP in two ways:
   \item Robustness to sparse data -- SCP has only been applied to conversations with at least 10 messages \bill{(I don't think  \cite{danescu-niculescu-mizil_echoes_2012} says anything about this)}. HAM is designed to work with tweets where there might only be one reply pair between a given pair of users. The hierarchical prior on alignments (parametrized by marker and by dyad) assumes similar alignment matters across dyads for a given marker. 
 \end{enumerate}
 
+\cite{doyle_investigating_2016} Says the following about normalizing by message length:
+``Due to the shortness of the messages, attempting to use marker counts normalized by message length could even introduce noise and weaken robustness to sparse data.'' but it seems this is exactly what the authors do with WHAM.
+
 Variations:
 \begin{itemize}
-  \item Word-based Hierarchical Alignment Model (WHAM) \citep{doyle_robust_2016} -- count proportion of $m$-tokens in $u_b$ (rather than binary presence). Corrects for ``artificial'' reply-length effects, but not the priming decay effect noted by Reitter et al (2006, 2008).
-  \item SWAM \citep{shin_alignment_2018} -- removes the hierarchy of normal distributions in WHAM, which ``improve signal detection when group dynamics are subtle or group membership is difficult to determine''. 
+  \item Word-based HAM (WHAM) \citep{doyle_robust_2016} -- count proportion of $m$-tokens in $u_b$ (rather than binary presence). Corrects for ``artificial'' reply-length effects, but not the priming decay effect noted by Reitter et al (2006, 2008).
+  \item Simplified WHAM (SWAM) \citep{shin_alignment_2018} -- removes the hierarchy of normal distributions in WHAM, which ``improve signal detection when group dynamics are subtle or group membership is difficult to determine''.  \bill{after looking at this paper again SWAM might actually be useful for us. The authors note that it is more computationally efficient than WHAM}
 \end{itemize}
 
-``Due to the shortness of the messages, attempting to use marker counts normalized by message length could even introduce noise and weaken robustness to sparse data.''
 
 
 \subsubsection{Other approaches // criticism}
 \begin{itemize}
   \item \cite{gao_understanding_2015} -- information theoretic approach that uses mutual information to measure dependence of $m$-usage in $u_b$ on $m$-usage in $u_a$. They also condition on message length and find that style coordination reported in other studies is partially attributed to message length coordination. \bill{It seems this method cannot distinguish between positive and negative coordination -- just degree of random variable dependence}.
-  \item \cite{xu_not_2018} -- low-level priming explains alignment better than sociolinguistic factors \bill{(false dichotomy?)}; message length confound; linear regression model
+  \item \cite{xu_not_2018} -- \bill{this is a false dichotomy?} low-level priming explains alignment better than sociolinguistic factors; message length confound; uses linear regression model
+\end{itemize}
+
+\subsection{Social network analysis}
+\begin{itemize}
+  \item \cite{blondel_fast_2008} -- Louvain clustering -- community detection method
+  \item \cite{traag_louvain_2018} -- Leiden clustering -- improvement on Louvain method \bill{haven't tried this yet}
 \end{itemize}
 
 \subsection{Other}
@@ -106,11 +130,6 @@ Variations:
   \item \cite{hamilton_loyalty_2017} -- Reddit users ``employ language that signals collective identity''
   \item \cite{cocco_discourse_2012} -- text type clustering using PoS n-grams 
   \item \cite{hua_wikiconv:_2018} -- larger wiki talkpages corpus (including article talkpages), supposedly better preprocessing; also includes intermediate states (e.g., comments that were later deleted) \bill{we decided it's not worth using this over the original DNM talkpages corpus}
-\end{itemize}
-
-\subsection{Social network analysis}
-\begin{itemize}
-  \item \cite{traag_louvain_2018} -- Leiden clustering -- improvement on Louvain community detection for social networks.
 \end{itemize}
 
 
@@ -155,28 +174,129 @@ Like SCP but except
 
 \section{Experiments \& results}
 
-\subsection{High level style features \& Utterance perplexity} % 22/06/17
+\subsection{Descriptive statistics}
+\begin{itemize}
+  \item n users
+  \item n posts
+  \item years / posts per year
+  \item n admins/n highly central (v. highly central) users
+  \item avg. posts per user (+admins vs highly central)
+  \item centrality histogram (w/admin colors) + two sample t-test centrality of admins/non-admins
+\end{itemize}
+\bill{todo}
 
-\href{https://github.com/winobes/lasn/blob/2991fdaa0023e038452dbfe13d0d325bb1783dfa/code/analysis.ipynb}{Notebook}
+\subsection{Replication/previous results}
+\begin{itemize}
+  \item coordination recieved (admin vs. highly central)
+\end{itemize}
+\bill{todo}
 
-\paragraph{Comparing linguistic style between admins/non-admins and high/low centrality users.} Linguistic style is measured by type-token ratio and function word/content word ratio. There are significant differences for both for each group, but the type-token has the more sizable effect size (very large actually! I'm not sure why it's so large.)
 
-\paragraph{Scatterplots of perplexity of utterance v.s. days since first post.} We had discussed it might be nice to graph since maybe the relationship isn't linear. Indeed there appears to be something like a logarithmic relationship (which upon reflection makes a good deal of sense). I noticed there are a bunch of posts with the exact same perplexity at several points. I think these represent some common one or two-word posts. I'm not sure if it's justified to remove them or not, or if there is good reason to other than that they're ugly.
+\subsection{Perplexity}
+We looked at the perplexity of utterances for admin/non-admin and highly-central/not users. 
+We measured perplexity with two models: KenLM \citep{heafield_kenlm:_2011}, and an RNN.
+\bill{There was an earlier notebook \href{https://github.com/winobes/lasn/blob/68d536e15876d2a5178c354d2b5601170b8689cb/code/analysis.ipynb}{here} where the KenLM perplexity was higher users with social power and the effect size was greater for centrality than adminship. I think there may have been something wrong withe model because the ppl scores were much higher in general, but it could be worth taking another look at}
 
-\subsection{}
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}lllll@{}}
+                     & \multicolumn{4}{c}{Perplexity (StdDev)} \\ \midrule
+                     & RNN      &          & KenLM  &          \\ \midrule
+(v.) high centrality & 149.648  & (43.72)  & 16.992 & (24.19)  \\
+low centrality       & 149.996  & (157.71) & 17.511 & (53.92)  \\
+admin                & 143.850  & (36.51)  & 15.456 & (22.52) \\
+non-admin            & 151.244  & (151.60) & 17.805 & (52.17) 
+\end{tabular}
+\end{table}
 
-\subsection{Formatting style features of (very) highly central users} % 27/11/17
-\paragraph{Italics}
-Non-admins have a higher rate of italics usage than non-admins (0.31 vs. 0.15, p<0.01)
-Low-centrality users have a higher rate of italics usage than highly-central users (0.26 vs 0.11, p<0.001)
+Perplexity under the two models is negatively correlated.
+The main cause appears to be that for some reason, KenLM assigned very high perplexity to short common utterances.
+See \href{https://github.com/winobes/lasn/blob/43865d451ef925c1b0043ffa126e77449d26e36f/code/py_analysis.ipynb}{this notebook} for details.
 
-\paragraph{Bold}
-Non-admins have a higher rate of bold usage than admins (0.18 vs 0.10, p<0.01)
-Low-centrality users have higher rate of bold usage than high-centrality users (0.17 vs. 0.02, p<0.01)
+A \href{https://github.com/winobes/lasn/blob/68d536e15876d2a5178c354d2b5601170b8689cb/code/analysis.ipynb}{previous look} at perplexity found that there is a weak negative association ($p < 0.001$, $r=-0.0130$) between perplexity and days-since-first-post. I.e., users' speech gets more regular over time.
 
-\paragraph{Links}
-Non-admins have a higher rate of link usage than admins (0.14 vs 0.03, p<0.01)
-Low-centrality users have a higher rate of link usage than high-centrality users (0.11 vs 0.02, p<0.01
+\subsubsection{Trendiness}
+
+For each year in the corpus, we train a language model $M^y$ and separately, a model $M$ for the entire corpus. We define the \emph{trendiness} of an utterance as the difference between its perplexity under the current-year model and the overall model:
+\[
+  T(u) = PPL(u) - PPL^y(u)
+\]
+where $u$ was uttered in year $y$.\bill{This could be refined with cleverer timeboxing of models}
+
+$T(u)$ is positive if the utterance is more likely under the current-year model than the overall model.
+
+
+Trendiness is positively correlated with Eigenvector centrality ($p < 0.01$). 
+Likewise, binarized centrality has a weak but significant positive effect ($d = 0.029$, $p < 0.01$) on trendiness.\bill{These results were also obtained with the quesitonable KenLM model.}
+
+\subsection{Linguistic style}
+\begin{itemize}
+  \item Multidimensional linguistic analysis (MDLA) -- \cite{biber_variation_1988}
+  \item Applied to blogs -- \cite{grieve_variation_2011}
+  \item Applied to Twitter -- \cite{clarke_dimensions_2017}
+\end{itemize}
+\subsubsection{Linguistic diversity (type-token ratio)}
+Moving average type-token ratio \cite{covington_cutting_2010} attempts to solve the problem of mesasge length confound. We find that for both centrality and adminship, utterances from higher power users tend to exhibit greater linguistic diversity. Centrality \bill{v. high varriant} has a slightly larger effect size \href{https://github.com/winobes/lasn/blob/cf852ec9946123a182db004afec20fa30d1e4dfa/code/analysis.ipynb}{(notebook)}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{@{}llll@{}}
+\toprule
+           & \multicolumn{2}{l}{mean MATTR-100} &           \\ \midrule
+           & high power       & low power       & Cohen's D \\ \midrule
+centrality & 0.6900           & 0.6809          & 0.1443    \\
+adminship  & 0.6901           & 0.6826          & 0.1208    \\ \bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Formatting features}
+\href{https://github.com/winobes/lasn/blob/51e511dd7ff6adf9d66fbf081def203566b1bce7/code/analysis.ipynb}{(notebook)}
+
+\paragraph{High/low power:}
+
+\begin{itemize}
+  \item post length (in tokens)
+    \begin{itemize}
+      \item Non-admins have shorter posts than non-admins (3.08 vs. 3.23, $p < 0.01$)
+      \item Low-centrality users have shorter posts than highly-central (3.08 vs. 3.36 $p < 0.01$)
+    \end{itemize}
+  \item italics
+    \begin{itemize}
+      \item Non-admins have a higher rate of italics usage than non-admins (0.31 vs. 0.15, $p<0.01$)
+      \item Low-centrality users have a higher rate of italics usage than highly-central users (0.26 vs 0.11, $p<0.001$)
+    \end{itemize}
+  \item bold
+    \begin{itemize}
+      \item Non-admins have a higher rate of bold usage than admins (0.18 vs 0.10, $p<0.01$)
+      \item Low-centrality users have higher rate of bold usage than high-centrality users (0.17 vs. 0.02, $p<0.01$)
+    \end{itemize}
+  \item links
+    \begin{itemize}
+      \item Non-admins have a higher rate of link usage than admins (0.14 vs 0.03, $p<0.01$)
+      \item Low-centrality users have a higher rate of link usage than high-centrality users (0.11 vs 0.02, $p<0.01$)
+    \end{itemize}
+\end{itemize}
+
+\paragraph{Between high power groups:}
+\begin{itemize}
+  \item the posts of highly-central users are not significantly longer than those of admins
+  \item highly-central users use fewer URLs, italics, and boldface than admins ($p < 0.001$, effect size between 0.2 and 0.4)
+  \item within the low centrality group, adminship does have an effect (admins use fewer italics, boldface, and links: $p < 0.05$, with effects between 0.2 and 0.5)
+  \item centrality has a similar effect among non-admins
+  \item with the (v.) highly-central group, adminship does not have an effect ($p > 0.05$ for any of the linguistic style features: length, italics, bold, links)
+  \item among admins, highly-central users use significantly fewer italics, boldface, and links
+\end{itemize}
+
+\subsection{Sub-communities}
+\href{https://github.com/winobes/lasn/blob/3a8dfcb1e48c56d07c0afe8973993c1c853d3908/code/analysis.ipynb}{notebook}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{louvain.png}
+\caption{Sub-communities computed with \href{https://github.com/taynaud/python-louvain}{python-louvain}. Edges are weighted by number of links between community members. Nodes are scaled by size of community.}
+\end{figure}
+
+Users give/receive significantly less coordination to/from members of their own sub-community.
 
 \bibliographystyle{humannat}
 \bibliography{notes}
