@@ -10,14 +10,20 @@ import nltk
 
 from collections import Counter, defaultdict
 
-def tokenize_posts(posts, overwrite=False):
+def tokenize_posts(posts, lower_case=True, overwrite=False):
     """ Add a 'tokens' column to the posts dataframe """
 
     if not overwrite and 'tokens' in posts:
         warnings.warn("Posts are already tokenized. Skipping tokenization.")
         return posts
-    
-    tokens = [nltk.tokenize.word_tokenize(text) for text in tqdm(posts['clean_text'], desc="Tokenizing posts.")]
+  
+    if lower_case:
+        preprocess = lambda x: x.lower() 
+    else:
+        preprocess = lambda x: x
+
+    texts = posts['clean_text'].apply(lambda x: preprocess(x)) 
+    tokens = [nltk.tokenize.word_tokenize(text) for text in tqdm(texts, desc="Tokenizing posts.")]
     posts = posts.assign(tokens=tokens)
 
     n = len(posts)

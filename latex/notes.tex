@@ -150,11 +150,11 @@ with those we like from WHAM:
 
 Given a "reply pair" $(u_a, u_b)$ of utterances by speakers $a$ and $b$, where $u_b$ is an immediate reply to $u_b$, we define the coordination of utterance $u_b$ along marker $m$ in terms of the surprisal contained in the number of $m$-tokens appearing in $u_b$.
 
-To measure surprisal, we assume that $b$ produces $m$-tokens according to a Bernouli distribution (i.e., bag of words assumption) estimated by $b$'s baseline $m$-token frequency, $f^m$, over all of their utterances.
+To measure surprisal, we assume that $b$ produces $m$-tokens according to a Bernouli distribution (i.e., bag of words assumption) estimated by $b$'s baseline $m$-token frequency, $f_m$, over all of their utterances.
 
 The surprisal with respect to $m$ is then:
 \[
-	\log_2\big(Binom(c;f^m,l)\big) = \log_2\Big[\binom{len(u_b)}{c} f^{c}(1-f)^{l-c}\Big]
+	\log_2\big(Binom(c;f_m,l)\big) = \log_2\Big[\binom{len(u_b)}{c} f^c_m(1-f_m)^{l-c}\Big]
 \]
 where $c$ is the count of $m$-tokens in $u_b$, and $l$ is the length (in tokens) of $u_b$.
 
