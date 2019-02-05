@@ -56,6 +56,7 @@ def create_posts():
     posts = pd.DataFrame(data=posts, index=posts['utterance_id'], columns=columns)
 
     n = len(posts)
+    posts['user'] = posts.user.apply(lambda x: x.strip())
     posts = posts[~(posts.user == '')]
     print("Filtered {} posts from blank or missing users".format(n - len(posts)))
 
