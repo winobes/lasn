@@ -7,13 +7,16 @@ import torch
 import torch.nn as nn
 import torch.onnx
 import logging
+import dill
+import torchtext as tt
 
-import data
 import model
 
 parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM Language Model')
-parser.add_argument('--data', type=str, default='./data/wikitext-2',
+parser.add_argument('--data', type=str, default='./lm_data/wikitalk_all',
                     help='location of the data corpus')
+parser.add_argument('--vocab', type=str, default='./lm_data/wikitalk_all/vocab.dill',
+                    help='location of the fitted vocab (torchtext Field object)')
 parser.add_argument('--model', type=str, default='LSTM',
                     help='type of recurrent net (RNN_TANH, RNN_RELU, LSTM, GRU)')
 parser.add_argument('--emsize', type=int, default=200,
@@ -38,8 +41,8 @@ parser.add_argument('--tied', action='store_true',
                     help='tie the word embedding and softmax weights')
 parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
-parser.add_argument('--cuda', action='store_true',
-                    help='use CUDA')
+parser.add_argument('--cuda', type=int, default=None,
+                    help='choose CUDA device')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
 parser.add_argument('--save', type=str, default='model.pt',
@@ -60,28 +63,21 @@ logging.basicConfig(
 # Set the random seed manually for reproducibility.
 torch.manual_seed(args.seed)
 if torch.cuda.is_available():
-    if not args.cuda:
+    if args.cuda is None:
         logging.warning("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
-device = torch.device("cuda" if args.cuda else "cpu")
+device = torch.device("cuda:{}".format(args.cuda) if args.cuda is not None else "cpu")
 
 ###############################################################################
 # Load data
 ###############################################################################
 
-corpus = data.Corpus(args.data)
-
-# Starting from sequential data, batchify arranges the dataset into columns.
-# For instance, with the alphabet as the sequence and batch size 4, we'd get
-# ┌ a g m s ┐
-# │ b h n t │
-# │ c i o u │
-# │ d j p v │
-# │ e k q w │
-# └ f l r x ┘.
-# These columns are treated as independent by the model, which means that the
-# dependence of e. g. 'g' on 'f' can not be learned, but allows more efficient
-# batch processing.
+text_field = torch.load(os.path.join(args.vocab), pickle_module=dill)
+train_data, val_data, test_data = tt.datasets.LanguageModelingDataset.splits(path=args.data,
+        train='train.txt', validation='valid.txt', test='test.txt',
+        text_field=text_field)
+ntokens = len(text_field.vocab)
+logging.info("Vocab size: {}".format(ntokens))
 
 def batchify(data, bsz):
     # Work out how cleanly we can divide the dataset into bsz parts.
@@ -92,16 +88,10 @@ def batchify(data, bsz):
     data = data.view(bsz, -1).t().contiguous()
     return data.to(device)
 
-eval_batch_size = 10
-train_data = batchify(corpus.train, args.batch_size)
-val_data = batchify(corpus.valid, eval_batch_size)
-test_data = batchify(corpus.test, eval_batch_size)
-
 ###############################################################################
 # Build the model
 ###############################################################################
 
-ntokens = len(corpus.dictionary)
 model = model.RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
 
 criterion = nn.CrossEntropyLoss()
@@ -118,57 +108,35 @@ def repackage_hidden(h):
         return tuple(repackage_hidden(v) for v in h)
 
 
-# get_batch subdivides the source data into chunks of length args.bptt.
-# If source is equal to the example output of the batchify function, with
-# a bptt-limit of 2, we'd get the following two Variables for i = 0:
-# ┌ a g m s ┐ ┌ b h n t ┐
-# └ b h n t ┘ └ c i o u ┘
-# Note that despite the name of the function, the subdivison of data is not
-# done along the batch dimension (i.e. dimension 1), since that was handled
-# by the batchify function. The chunks are along dimension 0, corresponding
-# to the seq_len dimension in the LSTM.
-
-def get_batch(source, i):
-    seq_len = min(args.bptt, len(source) - 1 - i)
-    data = source[i:i+seq_len]
-    target = source[i+1:i+1+seq_len].view(-1)
-    return data, target
-
-
-def evaluate(data_source):
+def evaluate(batch_iter):
     # Turn on evaluation mode which disables dropout.
     model.eval()
     total_loss = 0.
-    ntokens = len(corpus.dictionary)
-    hidden = model.init_hidden(eval_batch_size)
+    hidden = model.init_hidden(args.batch_size)
     with torch.no_grad():
-        for i in range(0, data_source.size(0) - 1, args.bptt):
-            data, targets = get_batch(data_source, i)
-            output, hidden = model(data, hidden)
+        for batch in batch_iter:
+            output, hidden = model(batch.text, hidden)
             output_flat = output.view(-1, ntokens)
-            total_loss += len(data) * criterion(output_flat, targets).item()
+            # total_loss += len(batch.text) * criterion(output_flat, batch.target.view(-1)).item()
+            total_loss += criterion(output_flat, batch.target.view(-1)).item()
             hidden = repackage_hidden(hidden)
-    return total_loss / (len(data_source) - 1)
+    return total_loss / len(batch_iter)
 
 
-def train():
+def train(batch_iter):
     # Turn on training mode which enables dropout.
     model.train()
+    # model.eval()
     total_loss = 0.
     start_time = time.time()
-    ntokens = len(corpus.dictionary)
     hidden = model.init_hidden(args.batch_size)
-    for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
-        data, targets = get_batch(train_data, i)
-        print(data.shape)
-        print(targets.shape)
-        print('----')
+    for i, batch in enumerate(batch_iter):
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
         hidden = repackage_hidden(hidden)
         model.zero_grad()
-        output, hidden = model(data, hidden)
-        loss = criterion(output.view(-1, ntokens), targets)
+        output, hidden = model(batch.text, hidden)
+        loss = criterion(output.view(-1, ntokens), batch.target.view(-1))
         loss.backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
@@ -178,12 +146,12 @@ def train():
 
         total_loss += loss.item()
 
-        if batch % args.log_interval == 0 and batch > 0:
+        if i % args.log_interval == 0 and i > 0:
             cur_loss = total_loss / args.log_interval
             elapsed = time.time() - start_time
             logging.info('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
                     'loss {:5.2f} | ppl {:8.2f}'.format(
-                epoch, batch, len(train_data) // args.bptt, lr,
+                epoch, i , len(batch_iter), lr,
                 elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
             total_loss = 0
             start_time = time.time()
@@ -206,8 +174,10 @@ best_val_loss = None
 try:
     for epoch in range(1, args.epochs+1):
         epoch_start_time = time.time()
-        train()
-        val_loss = evaluate(val_data)
+        train_iter = tt.data.BPTTIterator(train_data, batch_size=args.batch_size, bptt_len=args.bptt, device=device)
+        train(train_iter)
+        val_iter = tt.data.BPTTIterator(val_data, batch_size=args.batch_size, bptt_len = args.bptt, device=device)
+        val_loss = evaluate(val_iter)
         ppl = math.exp(val_loss)
         logging.info('-' * 89)
         logging.info('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
@@ -236,7 +206,8 @@ with open(args.save, 'rb') as f:
     model.rnn.flatten_parameters()
 
 # Run on test data.
-test_loss = evaluate(test_data)
+test_iter = tt.data.BPTTIterator(test_data, batch_size=args.batch_size, bptt_len = args.bptt, device=device)
+test_loss = evaluate(test_iter)
 logging.info('=' * 89)
 logging.info('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
     test_loss, math.exp(test_loss)))
