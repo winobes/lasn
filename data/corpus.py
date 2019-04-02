@@ -7,7 +7,7 @@ import os
 import pandas as pd
 import numpy as np
 import nltk
-import igraph
+# import igraph
 
 from collections import Counter, defaultdict
 
@@ -95,7 +95,8 @@ def load_network(reply_pairs=None, recreate=False, filename=None):
         if recreate:
             return create_network(reply_pairs) 
         else: 
-            return igraph.Graph.Read_Pickle(filename)
+            None
+            # return igraph.Graph.Read_Pickle(filename)
     except TypeError:
         return create_network(reply_pairs) 
 
