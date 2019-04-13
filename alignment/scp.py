@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from .util import load_markers
+import matplotlib.pyplot as plt
 
 markers = load_markers()
 markers_list = list(markers)
@@ -73,3 +74,17 @@ def wscp(posts, df, groupA):
     wscp['agg1'], wscp['agg2'], wscp['agg3'] = agg1, agg2, agg3
     
     return wscp
+
+def plot_scp(scp_data, group_labels, ax, colors=['violet', 'darkviolet'], groups=[True, False], title='Coordination Towards Group', width = 0.35):
+    items = ['agg1', 'agg2', 'agg3'] + markers_list
+    ind = np.arange(len(items))
+    p = []
+    for i, group in enumerate(groups):
+        values = [scp_data.mean(level=0).loc[group].loc[m] * 100 for m in items]
+        p.append(ax.bar(ind+i*width, list(values), width=width, color=colors[i]))
+    ax.legend((p[i][0] for i in range(len(p))), group_labels)
+    ax.set_title(title)
+    ax.set_xticklabels(items)
+    ax.set_xticks(ind+width)
+    for tick in ax.get_xticklabels():
+        tick.set_rotation(90)
